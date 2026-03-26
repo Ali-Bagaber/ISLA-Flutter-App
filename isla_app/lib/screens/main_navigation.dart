@@ -29,7 +29,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -137,7 +137,9 @@ class _NavBarItem extends StatelessWidget {
           children: [
             Icon(
               isActive ? activeIcon : icon,
-              color: isActive ? AppTheme.primaryColor : AppTheme.getTextSecondary(isDark),
+              color: isActive
+                  ? AppTheme.primaryColor
+                  : AppTheme.getTextSecondary(isDark),
               size: 24,
             ),
             const SizedBox(height: 4),
@@ -146,7 +148,9 @@ class _NavBarItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: isActive ? AppTheme.primaryColor : AppTheme.getTextSecondary(isDark),
+                color: isActive
+                    ? AppTheme.primaryColor
+                    : AppTheme.getTextSecondary(isDark),
               ),
             ),
           ],

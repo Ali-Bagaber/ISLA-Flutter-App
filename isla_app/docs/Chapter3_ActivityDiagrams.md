@@ -3,6 +3,7 @@
 ## 3.4.3 Activity Diagrams
 
 ### Overview
+
 This section presents the activity diagrams for the ISLA (Intelligent Study and Learning Assistant) system, illustrating the dynamic behavior and workflow of key system processes. Each diagram shows the flow of activities from start to completion, including decision points, parallel processes, and error handling.
 
 ---
@@ -96,6 +97,7 @@ Legend:
 ```
 
 **Key Activities:**
+
 1. User opens application
 2. System displays login screen
 3. User chooses login or register
@@ -104,6 +106,7 @@ Legend:
 6. System navigates to home on success or shows error
 
 **Decision Points:**
+
 - Has existing account?
 - Valid input format?
 - Authentication successful?
@@ -269,6 +272,7 @@ Legend:
 ```
 
 **Key Activities:**
+
 1. User navigates to documents library
 2. User selects a document
 3. User chooses study aid type (Summary/Flashcards/Quiz)
@@ -282,12 +286,14 @@ Legend:
 8. User optionally saves to library
 
 **Decision Points:**
+
 - Already generated?
 - Text extraction successful?
 - Which NLP algorithm to use?
 - Save for later?
 
 **Parallel Processes:**
+
 - NLP processing can run concurrently for different document types
 - Database queries occur in parallel with UI updates
 
@@ -415,6 +421,7 @@ Legend:
 ```
 
 **Key Activities:**
+
 1. User opens Planner screen
 2. System displays tasks with statistics
 3. User can:
@@ -427,6 +434,7 @@ Legend:
 6. System refreshes task list and statistics
 
 **Decision Points:**
+
 - Which action to perform?
 - All required fields filled?
 - Continue with more actions?
@@ -599,6 +607,7 @@ Legend:
 ```
 
 **Key Activities:**
+
 1. User navigates to Timer screen
 2. User selects subject for study session
 3. User starts 25-minute focus timer
@@ -611,11 +620,13 @@ Legend:
 10. System displays session summary
 
 **Decision Points:**
+
 - User action during timer (continue/pause/stop)?
 - Stop early confirmation?
 - Skip break timer?
 
 **Loop:**
+
 - Timer countdown loop (every second)
 - Break timer countdown loop
 
@@ -809,6 +820,7 @@ Legend:
 ```
 
 **Key Activities:**
+
 1. User opens Documents screen
 2. User clicks upload button (FAB)
 3. User fills upload form (title, subject, type)
@@ -822,11 +834,13 @@ Legend:
 11. System refreshes document library
 
 **Decision Points:**
+
 - All fields filled?
 - Supported file type?
 - File size acceptable?
 
 **Validation Checks:**
+
 - Required field validation
 - File type validation (PDF, PPTX, DOCX)
 - File size limit (10MB maximum)
@@ -835,46 +849,50 @@ Legend:
 
 ## Summary Table: Key Processes
 
-| Activity Diagram | Main Flow | Key Decision Points | Parallel Processes |
-|-----------------|-----------|---------------------|-------------------|
-| **1. Authentication** | Login → Validate → Navigate | Has account? Valid format? Auth success? | None |
+| Activity Diagram           | Main Flow                                        | Key Decision Points                                | Parallel Processes   |
+| -------------------------- | ------------------------------------------------ | -------------------------------------------------- | -------------------- |
+| **1. Authentication**      | Login → Validate → Navigate                      | Has account? Valid format? Auth success?           | None                 |
 | **2. Generate Study Aids** | Select doc → Choose type → Process NLP → Display | Already generated? Extraction OK? Which algorithm? | NLP processing types |
-| **3. Manage Tasks** | View list → Create/Update/Delete → Refresh | Which action? Valid input? | None |
-| **4. Study Session** | Start timer → Countdown → Break → Record | Pause/Resume? Stop early? Skip break? | Timer loop |
-| **5. Upload Document** | Fill form → Choose file → Validate → Save | Valid fields? Valid type? Valid size? | File system access |
+| **3. Manage Tasks**        | View list → Create/Update/Delete → Refresh       | Which action? Valid input?                         | None                 |
+| **4. Study Session**       | Start timer → Countdown → Break → Record         | Pause/Resume? Stop early? Skip break?              | Timer loop           |
+| **5. Upload Document**     | Fill form → Choose file → Validate → Save        | Valid fields? Valid type? Valid size?              | File system access   |
 
 ---
 
 ## Process Complexity Analysis
 
-| Process | Steps | Decision Points | User Interactions | System Complexity |
-|---------|-------|-----------------|-------------------|-------------------|
-| Authentication | 7 | 3 | 3 | Low |
-| Generate Study Aids | 12 | 4 | 5 | **High** |
-| Manage Tasks | 10 | 3 | 6 | Medium |
-| Study Session | 14 | 3 | 5 | Medium |
-| Upload Document | 11 | 4 | 6 | Medium |
+| Process             | Steps | Decision Points | User Interactions | System Complexity |
+| ------------------- | ----- | --------------- | ----------------- | ----------------- |
+| Authentication      | 7     | 3               | 3                 | Low               |
+| Generate Study Aids | 12    | 4               | 5                 | **High**          |
+| Manage Tasks        | 10    | 3               | 6                 | Medium            |
+| Study Session       | 14    | 3               | 5                 | Medium            |
+| Upload Document     | 11    | 4               | 6                 | Medium            |
 
 ---
 
 ## Technical Implementation Notes
 
 ### 1. **State Management**
+
 - All activities use Flutter Provider for state management
 - State changes trigger UI updates automatically
 - State persists across screen navigation
 
 ### 2. **Error Handling**
+
 - Input validation at multiple stages
 - User-friendly error messages
 - Graceful failure recovery
 
 ### 3. **Performance Considerations**
+
 - Asynchronous operations for file I/O
 - Timer runs on separate isolate
 - NLP processing simulated with delays (future: actual implementation)
 
 ### 4. **User Experience**
+
 - Loading indicators during processing
 - Progress bars for long operations
 - Confirmation dialogs for destructive actions
@@ -885,6 +903,7 @@ Legend:
 ## Conclusion
 
 These activity diagrams illustrate the core workflows of the ISLA system, demonstrating:
+
 - **Clear process flows** from user action to system response
 - **Comprehensive error handling** at critical decision points
 - **User-centric design** with multiple interaction paths

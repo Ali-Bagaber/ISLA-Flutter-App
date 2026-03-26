@@ -3,6 +3,7 @@
 ## 3.2 Use Case Diagram
 
 ### Overview
+
 This section presents the use case diagram and detailed descriptions for the ISLA (Intelligent Study and Learning Assistant) system, showing all possible interactions between the student user and the system.
 
 ---
@@ -63,14 +64,17 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student authenticates themselves to access the ISLA system or creates a new account.
 
 **Preconditions:**
+
 - Student has internet connection
 - Firebase Authentication service is available
 
 **Postconditions:**
+
 - Student is authenticated and logged into the system
 - Session token is generated and stored
 
 **Main Flow:**
+
 1. Student opens the ISLA application
 2. System displays login screen
 3. Student enters email and password
@@ -81,6 +85,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 8. Use case ends
 
 **Alternative Flow 1: Registration**
+
 1. At step 3, student clicks "Register" link
 2. System displays registration form
 3. Student enters name, email, password, and confirms password
@@ -92,11 +97,13 @@ This section presents the use case diagram and detailed descriptions for the ISL
 9. Use case ends
 
 **Exception Flow 1: Invalid Credentials**
+
 1. At step 6, Firebase returns authentication failure
 2. System displays error message "Invalid email or password"
 3. Return to step 2
 
 **Exception Flow 2: Network Error**
+
 1. At step 5, network connection fails
 2. System displays error message "Unable to connect. Please check your internet connection"
 3. Return to step 2
@@ -111,15 +118,18 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student uploads study materials (PDF, PPTX, DOCX) to the system for AI processing.
 
 **Preconditions:**
+
 - Student is logged in
 - Student has document file to upload
 
 **Postconditions:**
+
 - Document is stored in Firebase Storage
 - Document metadata is saved in Cloud Firestore
 - Document appears in student's document library
 
 **Main Flow:**
+
 1. Student navigates to Documents screen
 2. Student clicks "Upload" button
 3. System displays file picker dialog
@@ -134,21 +144,25 @@ This section presents the use case diagram and detailed descriptions for the ISL
 12. Use case ends
 
 **Alternative Flow 1: Upload Multiple Documents**
+
 1. At step 4, student selects multiple files
 2. System uploads files sequentially
 3. Continue to step 6 for each file
 
 **Exception Flow 1: Invalid File Type**
+
 1. At step 5, system detects unsupported file type
 2. System displays error "Only PDF, PPTX, and DOCX files are supported"
 3. Return to step 3
 
 **Exception Flow 2: File Too Large**
+
 1. At step 5, system detects file exceeds 10MB limit
 2. System displays error "File size must be less than 10MB"
 3. Return to step 3
 
 **Exception Flow 3: Upload Failed**
+
 1. At step 7, network error occurs during upload
 2. System displays error "Upload failed. Please try again"
 3. Return to step 2
@@ -163,15 +177,18 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student generates an extractive summary of a study document using TextRank algorithm.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one document is uploaded
 - Document text can be extracted
 
 **Postconditions:**
+
 - Summary is generated and displayed
 - Summary is saved in Cloud Firestore for future access
 
 **Main Flow:**
+
 1. Student navigates to Documents screen
 2. Student selects a document from library
 3. System displays document detail screen
@@ -187,16 +204,19 @@ This section presents the use case diagram and detailed descriptions for the ISL
 13. Use case ends
 
 **Alternative Flow 1: View Existing Summary**
+
 1. At step 4, if summary already exists
 2. System retrieves saved summary from Cloud Firestore
 3. Skip to step 12
 
 **Exception Flow 1: Text Extraction Failed**
+
 1. At step 7, system cannot extract text from document
 2. System displays error "Unable to process this document. Please ensure it contains readable text"
 3. Use case ends
 
 **Exception Flow 2: Document Too Short**
+
 1. At step 8, document contains fewer than 5 sentences
 2. System displays message "Document is too short to summarize"
 3. Use case ends
@@ -211,15 +231,18 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student generates flashcards from document using RAKE/YAKE keyword extraction algorithms.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one document is uploaded
 - Document contains extractable keywords
 
 **Postconditions:**
+
 - Flashcards are generated and displayed
 - Flashcards are saved in Cloud Firestore
 
 **Main Flow:**
+
 1. Student navigates to Documents screen
 2. Student selects a document
 3. System displays document detail screen
@@ -235,16 +258,19 @@ This section presents the use case diagram and detailed descriptions for the ISL
 13. Use case ends
 
 **Alternative Flow 1: Review Existing Flashcards**
+
 1. At step 4, if flashcards already exist
 2. System retrieves saved flashcards
 3. Skip to step 12
 
 **Alternative Flow 2: Customize Number of Flashcards**
+
 1. At step 4, student selects number of flashcards (10/20/30)
 2. System generates specified number of flashcards
 3. Continue to step 5
 
 **Exception Flow 1: Insufficient Keywords**
+
 1. At step 8-9, system finds fewer than 5 keywords
 2. System displays message "Not enough content to generate flashcards"
 3. Use case ends
@@ -259,15 +285,18 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student generates multiple-choice quiz questions from document content.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one document is uploaded
 
 **Postconditions:**
+
 - Quiz questions are generated and displayed
 - Quiz is saved in Cloud Firestore
 - Student can attempt the quiz
 
 **Main Flow:**
+
 1. Student navigates to Documents screen
 2. Student selects a document
 3. System displays document detail screen
@@ -284,12 +313,14 @@ This section presents the use case diagram and detailed descriptions for the ISL
 14. Use case ends
 
 **Alternative Flow 1: Retake Existing Quiz**
+
 1. At step 4, if quiz already exists
 2. System retrieves saved quiz
 3. System resets previous answers
 4. Skip to step 11
 
 **Exception Flow 1: Content Insufficient for Quiz**
+
 1. At step 7, system cannot identify enough concepts
 2. System displays message "Document content is insufficient for quiz generation"
 3. Use case ends
@@ -304,13 +335,16 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student creates a new study task (assignment, exam, revision).
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Task is created and saved in Cloud Firestore
 - Task appears in planner view
 
 **Main Flow:**
+
 1. Student navigates to Planner screen
 2. Student clicks "Add Task" button (FAB)
 3. System displays task creation form
@@ -329,11 +363,13 @@ This section presents the use case diagram and detailed descriptions for the ISL
 10. Use case ends
 
 **Alternative Flow 1: Set Reminder**
+
 1. At step 4, student enables reminder toggle
 2. Student selects reminder time (1 day before, 1 week before, etc.)
 3. Continue to step 5
 
 **Exception Flow 1: Missing Required Fields**
+
 1. At step 6, required fields are empty
 2. System highlights missing fields
 3. System displays error "Please fill all required fields"
@@ -349,14 +385,17 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student modifies an existing task's details or marks it as complete.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one task exists
 
 **Postconditions:**
+
 - Task is updated in Cloud Firestore
 - Changes are reflected in planner view
 
 **Main Flow:**
+
 1. Student navigates to Planner screen
 2. Student views task list
 3. Student taps on a task
@@ -372,6 +411,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 13. Use case ends
 
 **Alternative Flow 1: Mark as Complete**
+
 1. At step 3, student taps checkbox on task
 2. System marks task as completed
 3. System updates completion status in Cloud Firestore
@@ -379,6 +419,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 5. Use case ends
 
 **Alternative Flow 2: Unmark Complete**
+
 1. At step 3, student taps checkbox on completed task
 2. System marks task as pending
 3. Task moves back to pending section
@@ -394,14 +435,17 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student removes a task from the system.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one task exists
 
 **Postconditions:**
+
 - Task is deleted from Cloud Firestore
 - Task is removed from planner view
 
 **Main Flow:**
+
 1. Student navigates to Planner screen
 2. Student views task list
 3. Student long-presses on a task OR taps delete icon
@@ -413,6 +457,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 9. Use case ends
 
 **Alternative Flow 1: Cancel Deletion**
+
 1. At step 5, student clicks "Cancel" button
 2. Dialog closes
 3. Use case ends
@@ -427,12 +472,15 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student views tasks in calendar format to see upcoming deadlines.
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Calendar view displays tasks organized by due dates
 
 **Main Flow:**
+
 1. Student navigates to Planner screen
 2. Student switches to "Calendar" tab
 3. System retrieves all tasks from Cloud Firestore
@@ -444,6 +492,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 9. Use case ends
 
 **Alternative Flow 1: Navigate to Different Month**
+
 1. At step 5, student swipes to previous/next month
 2. System updates calendar display
 3. Continue to step 6
@@ -458,14 +507,17 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student starts a timed study session using Pomodoro technique (25 min work, 5 min break).
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Study session is tracked and recorded
 - Session data is saved to Cloud Firestore
 - Study statistics are updated
 
 **Main Flow:**
+
 1. Student navigates to Timer screen
 2. Student selects subject (e.g., BCS2033)
 3. Student clicks "Start" button
@@ -482,6 +534,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 14. Use case ends
 
 **Alternative Flow 1: Pause Session**
+
 1. At step 5, student clicks "Pause" button
 2. System pauses timer
 3. Student clicks "Resume" button
@@ -489,6 +542,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 5. Continue to step 6
 
 **Alternative Flow 2: Stop Session Early**
+
 1. At step 5, student clicks "Stop" button
 2. System displays confirmation dialog
 3. Student confirms stop
@@ -496,6 +550,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 5. Continue to step 11
 
 **Alternative Flow 3: Skip Break**
+
 1. At step 9, student clicks "Skip Break" button
 2. System stops break timer
 3. Continue to step 11
@@ -510,13 +565,16 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student views their study time statistics and patterns.
 
 **Preconditions:**
+
 - Student is logged in
 - At least one study session has been completed
 
 **Postconditions:**
+
 - Statistics are displayed in graphical format
 
 **Main Flow:**
+
 1. Student navigates to Timer or Dashboard screen
 2. System retrieves study session data from Cloud Firestore
 3. System calculates statistics:
@@ -533,6 +591,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 6. Use case ends
 
 **Alternative Flow 1: No Data Available**
+
 1. At step 2, no study sessions found
 2. System displays message "No study data yet. Start your first study session!"
 3. Use case ends
@@ -547,13 +606,16 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student enters their grades and the system calculates GPA and CGPA.
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Grades are saved in Cloud Firestore
 - GPA and CGPA are calculated and displayed
 
 **Main Flow:**
+
 1. Student navigates to Dashboard screen
 2. Student clicks "GPA Calculator" card
 3. System displays GPA calculator form
@@ -575,6 +637,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 12. Use case ends
 
 **Alternative Flow 1: View Grade Trend**
+
 1. At step 11, student clicks "View Trend" button
 2. System displays semester-by-semester GPA chart
 3. Use case ends
@@ -589,12 +652,15 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student views comprehensive performance dashboard with study metrics and academic progress.
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Dashboard displays all performance metrics
 
 **Main Flow:**
+
 1. Student navigates to Dashboard screen
 2. System retrieves data from Cloud Firestore:
    - Current GPA/CGPA
@@ -626,13 +692,16 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student switches between dark and light theme for comfortable viewing.
 
 **Preconditions:**
+
 - Student is using the application
 
 **Postconditions:**
+
 - Theme preference is applied across all screens
 - Preference is saved locally
 
 **Main Flow:**
+
 1. Student views any screen in the app
 2. Student taps theme toggle icon (sun/moon) in header
 3. System switches theme:
@@ -655,12 +724,15 @@ This section presents the use case diagram and detailed descriptions for the ISL
 **Description:** Student views all uploaded documents with filtering and search capabilities.
 
 **Preconditions:**
+
 - Student is logged in
 
 **Postconditions:**
+
 - Document library is displayed with all available documents
 
 **Main Flow:**
+
 1. Student navigates to Documents screen
 2. System retrieves document metadata from Cloud Firestore
 3. System displays document list with:
@@ -677,12 +749,14 @@ This section presents the use case diagram and detailed descriptions for the ISL
 7. Use case ends
 
 **Alternative Flow 1: Empty Library**
+
 1. At step 2, no documents found
 2. System displays empty state with "Upload your first document" message
 3. Student can click "Upload" button
 4. Continue to UC02
 
 **Alternative Flow 2: Delete Document**
+
 1. At step 6, student taps delete icon
 2. System displays confirmation dialog
 3. Student confirms deletion
@@ -695,6 +769,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 ## Use Case Priority
 
 ### High Priority (Must Have - MVP):
+
 - UC01: Login/Register
 - UC02: Upload Study Documents
 - UC03: Generate Summary
@@ -703,6 +778,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 - UC15: View Document Library
 
 ### Medium Priority (Should Have):
+
 - UC04: Generate Flashcards
 - UC05: Generate Quiz Questions
 - UC06: Create Task
@@ -710,6 +786,7 @@ This section presents the use case diagram and detailed descriptions for the ISL
 - UC11: View Study Statistics
 
 ### Low Priority (Nice to Have):
+
 - UC08: Delete Task
 - UC09: View Tasks Calendar
 - UC12: Calculate GPA/CGPA
@@ -720,11 +797,13 @@ This section presents the use case diagram and detailed descriptions for the ISL
 ## Use Case Relationships
 
 ### Includes:
+
 - UC03, UC04, UC05 → **include** → UC02 (requires document to be uploaded first)
 - UC11 → **include** → UC10 (statistics depend on study sessions)
 - UC13 → **include** → UC10, UC06, UC12 (dashboard aggregates data from multiple sources)
 
 ### Extends:
+
 - UC07 → **extends** → UC06 (updating task is an extension of task management)
 - UC08 → **extends** → UC06 (deleting task is an extension of task management)
 
@@ -732,10 +811,10 @@ This section presents the use case diagram and detailed descriptions for the ISL
 
 ## Actor-Use Case Matrix
 
-| Actor | UC01 | UC02 | UC03 | UC04 | UC05 | UC06 | UC07 | UC08 | UC09 | UC10 | UC11 | UC12 | UC13 | UC14 | UC15 |
-|-------|------|------|------|------|------|------|------|------|------|------|------|------|------|------|------|
-| Student | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Firebase | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ |
+| Actor    | UC01 | UC02 | UC03 | UC04 | UC05 | UC06 | UC07 | UC08 | UC09 | UC10 | UC11 | UC12 | UC13 | UC14 | UC15 |
+| -------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| Student  | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    |
+| Firebase | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | ✓    | -    | ✓    |
 
 ---
 

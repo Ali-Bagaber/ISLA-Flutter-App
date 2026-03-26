@@ -37,9 +37,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _updateTime() {
     final now = DateTime.now();
     final hour = now.hour;
-    
+
     setState(() {
-      _currentTime = '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+      _currentTime =
+          '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
       if (hour < 12) {
         _greeting = 'Good Morning';
       } else if (hour < 17) {
@@ -54,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = themeProvider.isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       body: SafeArea(
@@ -91,7 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       IconButton(
                         icon: Icon(
-                          isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                          isDark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
                           color: AppTheme.getTextPrimary(isDark),
                         ),
                         onPressed: () => themeProvider.toggleTheme(),
@@ -152,9 +155,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               Row(
                 children: [
                   Expanded(
@@ -294,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Today's Study Time", 
+                          "Today's Study Time",
                           style: AppTheme.labelMedium.copyWith(
                             color: AppTheme.getTextPrimary(isDark),
                           ),
@@ -340,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Quick Actions', 
+                    'Quick Actions',
                     style: AppTheme.headingSmall.copyWith(
                       color: AppTheme.getTextPrimary(isDark),
                     ),
@@ -417,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Recent Documents', 
+                    'Recent Documents',
                     style: AppTheme.headingSmall.copyWith(
                       color: AppTheme.getTextPrimary(isDark),
                     ),
@@ -468,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Upcoming Tasks', 
+                    'Upcoming Tasks',
                     style: AppTheme.headingSmall.copyWith(
                       color: AppTheme.getTextPrimary(isDark),
                     ),
@@ -661,7 +664,7 @@ class _DocumentCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      date, 
+                      date,
                       style: AppTheme.bodySmall.copyWith(
                         color: AppTheme.getTextSecondary(isDark),
                       ),
@@ -672,7 +675,7 @@ class _DocumentCard extends StatelessWidget {
             ),
           ),
           Icon(
-            Icons.chevron_right_rounded, 
+            Icons.chevron_right_rounded,
             color: AppTheme.getTextLight(isDark),
           ),
         ],
@@ -724,7 +727,7 @@ class _TaskCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title, 
+                  title,
                   style: AppTheme.labelMedium.copyWith(
                     color: AppTheme.getTextPrimary(isDark),
                   ),
@@ -735,7 +738,9 @@ class _TaskCard extends StatelessWidget {
                     Icon(
                       Icons.access_time_rounded,
                       size: 14,
-                      color: isUrgent ? AppTheme.error : AppTheme.getTextSecondary(isDark),
+                      color: isUrgent
+                          ? AppTheme.error
+                          : AppTheme.getTextSecondary(isDark),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -753,9 +758,9 @@ class _TaskCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: isDark 
-                          ? AppTheme.getTextLight(isDark).withOpacity(0.1)
-                          : AppTheme.surfaceColor,
+                        color: isDark
+                            ? AppTheme.getTextLight(isDark).withOpacity(0.1)
+                            : AppTheme.surfaceColor,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(

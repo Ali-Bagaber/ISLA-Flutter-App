@@ -13,13 +13,30 @@ class GPACalculatorScreen extends StatefulWidget {
 class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
   final List<Map<String, dynamic>> _courses = [
     {'name': 'Data Structures', 'code': 'BCS2033', 'credit': 3, 'grade': 'A-'},
-    {'name': 'Software Engineering', 'code': 'BCS3012', 'credit': 3, 'grade': 'B+'},
+    {
+      'name': 'Software Engineering',
+      'code': 'BCS3012',
+      'credit': 3,
+      'grade': 'B+'
+    },
     {'name': 'Database Systems', 'code': 'BCS2042', 'credit': 3, 'grade': 'A'},
     {'name': 'Web Development', 'code': 'BCS4051', 'credit': 3, 'grade': 'B'},
   ];
 
-  final List<String> _grades = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F'];
-  
+  final List<String> _grades = [
+    'A',
+    'A-',
+    'B+',
+    'B',
+    'B-',
+    'C+',
+    'C',
+    'C-',
+    'D+',
+    'D',
+    'F'
+  ];
+
   final Map<String, double> _gradePoints = {
     'A': 4.00,
     'A-': 3.67,
@@ -36,17 +53,17 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
 
   double _calculateGPA() {
     if (_courses.isEmpty) return 0.0;
-    
+
     double totalPoints = 0;
     int totalCredits = 0;
-    
+
     for (var course in _courses) {
       final credit = course['credit'] as int;
       final grade = course['grade'] as String;
       totalPoints += credit * (_gradePoints[grade] ?? 0);
       totalCredits += credit;
     }
-    
+
     return totalCredits > 0 ? totalPoints / totalCredits : 0.0;
   }
 
@@ -73,7 +90,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
   @override
   Widget build(BuildContext context) {
     final gpa = _calculateGPA();
-    
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -157,7 +174,8 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
                   children: [
                     _GPAStatChip(
                       label: 'Total Credits',
-                      value: '${_courses.fold(0, (sum, c) => sum + (c['credit'] as int))}',
+                      value:
+                          '${_courses.fold(0, (sum, c) => sum + (c['credit'] as int))}',
                     ),
                     const SizedBox(width: 16),
                     _GPAStatChip(
@@ -169,7 +187,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
               ],
             ),
           ),
-          
+
           // Course List Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -185,7 +203,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
               ],
             ),
           ),
-          
+
           // Course List
           Expanded(
             child: _courses.isEmpty
@@ -350,7 +368,7 @@ class _CourseCard extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Grade Dropdown
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -376,7 +394,7 @@ class _CourseCard extends StatelessWidget {
               },
             ),
           ),
-          
+
           // Delete Button
           IconButton(
             onPressed: onDelete,
@@ -434,7 +452,7 @@ class _AddCourseBottomSheetState extends State<_AddCourseBottomSheet> {
           const SizedBox(height: 20),
           Text('Add Course', style: AppTheme.headingSmall),
           const SizedBox(height: 24),
-          
+
           // Course Name
           TextField(
             controller: _nameController,
@@ -444,7 +462,7 @@ class _AddCourseBottomSheetState extends State<_AddCourseBottomSheet> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Course Code
           TextField(
             controller: _codeController,
@@ -454,7 +472,7 @@ class _AddCourseBottomSheetState extends State<_AddCourseBottomSheet> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Credit Hours & Grade
           Row(
             children: [
@@ -474,7 +492,8 @@ class _AddCourseBottomSheetState extends State<_AddCourseBottomSheet> {
                               onTap: () => setState(() => _credit = c),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppTheme.primaryColor
@@ -529,7 +548,7 @@ class _AddCourseBottomSheetState extends State<_AddCourseBottomSheet> {
             ],
           ),
           const SizedBox(height: 24),
-          
+
           // Add Button
           SizedBox(
             width: double.infinity,

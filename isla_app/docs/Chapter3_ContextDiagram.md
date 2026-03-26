@@ -3,9 +3,11 @@
 ## 3.1 Context Diagram
 
 ### Overview
+
 The Context Diagram represents the highest-level view of the ISLA (Intelligent Study and Learning Assistant) system, showing the system boundary and its interactions with external entities.
 
 ### System Boundary
+
 The ISLA system is a mobile-first study assistant application designed for university students, particularly those from FKOM, UMPSA.
 
 ---
@@ -72,9 +74,11 @@ The ISLA system is a mobile-first study assistant application designed for unive
 ## External Entities
 
 ### 1. Student (User)
+
 **Description:** The primary user of the ISLA system - undergraduate students from FKOM, UMPSA.
 
 **Interactions with System:**
+
 - **Input to System:**
   - Authentication credentials (email, password)
   - Study documents (PDF, PPTX, DOCX)
@@ -93,9 +97,11 @@ The ISLA system is a mobile-first study assistant application designed for unive
   - GPA/CGPA calculations
 
 ### 2. Firebase Backend Services
+
 **Description:** Google's Backend-as-a-Service platform providing authentication, database, and storage.
 
 **Interactions with System:**
+
 - **Input to System:**
   - Authentication verification results
   - Stored user data
@@ -160,6 +166,7 @@ The ISLA system is a mobile-first study assistant application designed for unive
    - ISLA System → Student (performance reports, charts, GPA)
 
 ### Important Note:
+
 **All data flows pass through the ISLA System.** Firebase services never communicate directly with the student. The ISLA system acts as the intermediary, orchestrator, and business logic layer. **All AI-powered study aid generation happens internally within ISLA** using lightweight extractive NLP algorithms (TextRank, RAKE, YAKE).
 
 ---
@@ -167,6 +174,7 @@ The ISLA system is a mobile-first study assistant application designed for unive
 ## System Boundary
 
 **Inside the System Boundary:**
+
 - User interface (mobile-first responsive design)
 - Authentication module
 - Document management module
@@ -182,6 +190,7 @@ The ISLA system is a mobile-first study assistant application designed for unive
 - Business logic and data processing
 
 **Outside the System Boundary:**
+
 - End users (students)
 - Firebase backend infrastructure (Authentication, Firestore, Storage)
 - User devices (smartphones, tablets, computers)

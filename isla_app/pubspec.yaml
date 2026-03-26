@@ -1,0 +1,41 @@
+name: isla_app
+description: ISLA - Intelligent Study and Learning Assistant
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+
+  # State management
+  provider: ^6.1.1
+
+  # Date & Calendar
+  table_calendar: ^3.0.9
+  intl: ^0.18.1
+
+  # Utils
+  percent_indicator: ^4.2.3
+  flip_card: ^0.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/

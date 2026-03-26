@@ -1,0 +1,894 @@
+# Chapter 3: System Design
+
+## 3.4.3 Activity Diagrams
+
+### Overview
+This section presents the activity diagrams for the ISLA (Intelligent Study and Learning Assistant) system, illustrating the dynamic behavior and workflow of key system processes. Each diagram shows the flow of activities from start to completion, including decision points, parallel processes, and error handling.
+
+---
+
+## Activity Diagram 1: User Authentication (Login/Register)
+
+**Purpose:** Shows the authentication flow for user login and registration processes.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     USER AUTHENTICATION FLOW                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+        User                    ISLA System                 Firebase (Future)
+         │                           │                              │
+         ●                           │                              │
+         │                           │                              │
+         ├──── Open App ────────────►│                              │
+         │                           │                              │
+         │                      ┌────▼────┐                         │
+         │                      │ Display │                         │
+         │                      │  Login  │                         │
+         │                      │ Screen  │                         │
+         │                      └────┬────┘                         │
+         │                           │                              │
+         │                      ◆────▼────◆                         │
+         │                  Has Account?                            │
+         │                      │         │                         │
+         │              Yes ────┤         ├──── No                  │
+         │                      │         │                         │
+         ├─ Enter Email &       │    ┌────▼────┐                   │
+         │  Password             │    │ Display │                   │
+         │                       │    │Register │                   │
+         ├─ Click Login         │    │  Form   │                   │
+         │                       │    └────┬────┘                   │
+         │                  ┌────▼────┐    │                        │
+         │                  │ Validate│    ◄─── Enter Details      │
+         │                  │  Input  │                             │
+         │                  └────┬────┘                             │
+         │                       │                                  │
+         │                  ◆────▼────◆                             │
+         │              Valid Format?                               │
+         │                  │         │                             │
+         │          Yes ────┤         ├──── No                      │
+         │                  │         │                             │
+         │                  │    ┌────▼────┐                        │
+         │                  │    │ Display │                        │
+         │                  │    │  Error  │                        │
+         │                  │    │ Message │                        │
+         │                  │    └────┬────┘                        │
+         │                  │         │                             │
+         │                  │         └────────┐                    │
+         │                  │                  │                    │
+         │             ┌────▼────┐            │                    │
+         │             │Simulate │            │                    │
+         │             │  Auth   │            │                    │
+         │             │(1s delay)◄───────────┘                    │
+         │             └────┬────┘                                 │
+         │                  │                                      │
+         │        ┌─────────┴──────────┐                          │
+         │        │ [Future: Verify    │                          │
+         │        │  with Firebase]    ├────────────────────────► │
+         │        └─────────┬──────────┘                          │
+         │                  │                                      │
+         │                  │           ◄──── Auth Response ──────┤
+         │                  │                                      │
+         │             ◆────▼────◆                                 │
+         │         Authenticated?                                  │
+         │             │         │                                 │
+         │     Yes ────┤         ├──── No                          │
+         │             │         │                                 │
+         │        ┌────▼────┐   ┌▼────────┐                       │
+         │        │Navigate │   │ Display │                       │
+         │        │   to    │   │"Invalid │                       │
+         │        │  Home   │   │Credentials"                     │
+         │        │ Screen  │   └┬────────┘                       │
+         │        └────┬────┘    │                                │
+         │             │          └──────────┐                    │
+         │             │                     │                    │
+         ◄── Show Home Dashboard             │                    │
+         │             │                     │                    │
+         │             ●                     └────────────────────►│
+         │                                                         │
+        End                                              Retry Login
+
+Legend:
+● = Start/End point
+◆ = Decision point
+┌─┐ = Activity/Process
+─► = Flow direction
+```
+
+**Key Activities:**
+1. User opens application
+2. System displays login screen
+3. User chooses login or register
+4. System validates input format
+5. System authenticates credentials (mock in prototype)
+6. System navigates to home on success or shows error
+
+**Decision Points:**
+- Has existing account?
+- Valid input format?
+- Authentication successful?
+
+---
+
+## Activity Diagram 2: Generate Study Aids (Core Feature)
+
+**Purpose:** Illustrates the complete workflow for generating AI-powered study aids from uploaded documents.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     GENERATE STUDY AIDS FLOW                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+      User                 ISLA System               NLP Engine          Database
+       │                        │                         │                  │
+       ●                        │                         │                  │
+       │                        │                         │                  │
+       ├── Navigate to ────────►│                         │                  │
+       │   Documents             │                         │                  │
+       │                    ┌───▼────┐                    │                  │
+       │                    │ Display│                    │                  │
+       │                    │Document│◄───────────────────┼─ Fetch Docs ────┤
+       │                    │ Library│                    │                  │
+       │                    └───┬────┘                    │                  │
+       │                        │                         │                  │
+       ├─ Select Document ──────►│                         │                  │
+       │                        │                         │                  │
+       │                    ┌───▼────┐                    │                  │
+       │                    │ Display│                    │                  │
+       │                    │Document│                    │                  │
+       │                    │ Detail │                    │                  │
+       │                    │Options:│                    │                  │
+       │                    │▪Summary│                    │                  │
+       │                    │▪Flashcards                  │                  │
+       │                    │▪Quiz   │                    │                  │
+       │                    └───┬────┘                    │                  │
+       │                        │                         │                  │
+       ├─ Select Study Aid Type ►│                        │                  │
+       │   (Summary/Flash/Quiz)  │                        │                  │
+       │                        │                         │                  │
+       │                    ┌───▼────┐                    │                  │
+       │                    │  Check │                    │                  │
+       │                    │Existing│◄───────────────────┼─ Query Cache ───┤
+       │                    │Content │                    │                  │
+       │                    └───┬────┘                    │                  │
+       │                        │                         │                  │
+       │                   ◆────▼────◆                    │                  │
+       │               Already Generated?                 │                  │
+       │                   │         │                    │                  │
+       │           Yes ────┤         ├──── No             │                  │
+       │                   │         │                    │                  │
+       │              ┌────▼────┐   ┌▼────────┐           │                  │
+       │              │Retrieve │   │ Display │           │                  │
+       │              │  from   │   │"Generating│          │                  │
+       │              │Database │   │..." Loading          │                  │
+       │              └────┬────┘   └┬────────┘           │                  │
+       │                   │         │                    │                  │
+       │                   │    ┌────▼─────┐              │                  │
+       │                   │    │ Extract  │              │                  │
+       │                   │    │   Text   │              │                  │
+       │                   │    │   from   │              │                  │
+       │                   │    │Document  │              │                  │
+       │                   │    └────┬─────┘              │                  │
+       │                   │         │                    │                  │
+       │                   │    ◆────▼────◆               │                  │
+       │                   │  Extraction OK?              │                  │
+       │                   │    │         │               │                  │
+       │                   │ Yes┤         ├No             │                  │
+       │                   │    │    ┌────▼─────┐         │                  │
+       │                   │    │    │  Show    │         │                  │
+       │                   │    │    │"Failed to│         │                  │
+       │                   │    │    │ Extract" │         │                  │
+       │                   │    │    └────┬─────┘         │                  │
+       │                   │    │         │               │                  │
+       │                   │    │         └──────────────►●                  │
+       │                   │    │                      (Error End)           │
+       │                   │    │                         │                  │
+       │                   │  ┌─▼────────────┐            │                  │
+       │                   │  │ Determine    │            │                  │
+       │                   │  │   NLP Type   │            │                  │
+       │                   │  └─┬────────────┘            │                  │
+       │                   │    │                         │                  │
+       │                   │  ┌─▼─────────────────────────▼──┐               │
+       │                   │  │  PARALLEL NLP PROCESSING:   │               │
+       │                   │  │                             │               │
+       │                   │  │  ┌──────────────────┐       │               │
+       │                   │  │  │ If SUMMARY:      │       │               │
+       │                   │  │  │ Apply TextRank   ├───────┼──────────────►│
+       │                   │  │  │ Algorithm        │       │               │
+       │                   │  │  │ • Score sentences│       │   [Future:    │
+       │                   │  │  │ • Rank by score  │       │   Actual NLP  │
+       │                   │  │  │ • Select top 5-10│       │   Algorithms] │
+       │                   │  │  └──────────────────┘       │               │
+       │                   │  │                             │               │
+       │                   │  │  ┌──────────────────┐       │               │
+       │                   │  │  │ If FLASHCARDS:   │       │               │
+       │                   │  │  │ Apply RAKE/YAKE  ├───────┼──────────────►│
+       │                   │  │  │ • Extract keywords       │               │
+       │                   │  │  │ • Score phrases  │       │   [Future:    │
+       │                   │  │  │ • Generate Q&A   │       │   Actual NLP  │
+       │                   │  │  │ • Create 5-15 cards      │   Algorithms] │
+       │                   │  │  └──────────────────┘       │               │
+       │                   │  │                             │               │
+       │                   │  │  ┌──────────────────┐       │               │
+       │                   │  │  │ If QUIZ:         │       │               │
+       │                   │  │  │ Extract concepts ├───────┼──────────────►│
+       │                   │  │  │ • Identify topics│       │               │
+       │                   │  │  │ • Generate MCQs  │       │   [Future:    │
+       │                   │  │  │ • Create distractors     │   Actual NLP  │
+       │                   │  │  │ • Generate 5-10 Q's      │   Algorithms] │
+       │                   │  │  └──────────────────┘       │               │
+       │                   │  │                             │               │
+       │                   │  └─┬───────────────────────────┘               │
+       │                   │    │                         │                  │
+       │                   │  ┌─▼────────┐                │                  │
+       │                   │  │ Format   │                │                  │
+       │                   │  │ Output   │                │                  │
+       │                   │  │ Content  │                │                  │
+       │                   │  └─┬────────┘                │                  │
+       │                   │    │                         │                  │
+       │                   │  ┌─▼────────┐                │                  │
+       │                   │  │  Save    │                │                  │
+       │                   │  │Generated │                │                  │
+       │                   │  │ Content  ├────────────────┼─ Store Result ─►│
+       │                   │  └─┬────────┘                │                  │
+       │                   │    │                         │                  │
+       │                   └────┤                         │                  │
+       │                        │                         │                  │
+       │                   ┌────▼────┐                    │                  │
+       │                   │ Display │                    │                  │
+       │                   │Generated│                    │                  │
+       │                   │  Study  │                    │                  │
+       │                   │   Aid   │                    │                  │
+       │                   └────┬────┘                    │                  │
+       │                        │                         │                  │
+       ◄─── View Content ───────┤                         │                  │
+       │                        │                         │                  │
+       │                   ◆────▼────◆                    │                  │
+       │               Save for Later?                    │                  │
+       │                   │         │                    │                  │
+       │           Yes ────┤         ├──── No             │                  │
+       │                   │         │                    │                  │
+       │              ┌────▼────┐    │                    │                  │
+       │              │   Add   │    │                    │                  │
+       │              │   to    │    │                    │                  │
+       │              │ Library ├────┼────────────────────┼─ Save to DB ───►│
+       │              └────┬────┘    │                    │                  │
+       │                   │         │                    │                  │
+       │                   └─────┬───┘                    │                  │
+       │                         │                        │                  │
+       │                         ●                        │                  │
+       │                                                  │                  │
+      End                                                End               End
+
+Legend:
+● = Start/End point
+◆ = Decision point
+┌─┐ = Activity/Process
+─► = Flow direction
+║ = Parallel processing
+```
+
+**Key Activities:**
+1. User navigates to documents library
+2. User selects a document
+3. User chooses study aid type (Summary/Flashcards/Quiz)
+4. System checks if content already generated
+5. System extracts text from document
+6. System applies appropriate NLP algorithm:
+   - **TextRank** for summaries (extractive summarization)
+   - **RAKE/YAKE** for flashcards (keyword extraction)
+   - **Concept extraction** for quiz generation
+7. System formats and displays generated content
+8. User optionally saves to library
+
+**Decision Points:**
+- Already generated?
+- Text extraction successful?
+- Which NLP algorithm to use?
+- Save for later?
+
+**Parallel Processes:**
+- NLP processing can run concurrently for different document types
+- Database queries occur in parallel with UI updates
+
+---
+
+## Activity Diagram 3: Manage Tasks & Exams
+
+**Purpose:** Shows the workflow for creating, viewing, updating, and deleting academic tasks.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       MANAGE TASKS & EXAMS FLOW                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+       User                    ISLA System                     Local Storage
+        │                           │                               │
+        ●                           │                               │
+        │                           │                               │
+        ├── Navigate to Planner ───►│                               │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │ Display │                          │
+        │                      │  Task   │◄─────────────────────────┤
+        │                      │  List   │    Fetch Tasks           │
+        │                      │   +     │                          │
+        │                      │Calendar │                          │
+        │                      └────┬────┘                          │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │  Show   │                          │
+        │                      │Statistics                          │
+        │                      │• Total  │                          │
+        │                      │• Pending│                          │
+        │                      │• Done   │                          │
+        │                      └────┬────┘                          │
+        │                           │                               │
+        │                      ◆────▼────◆                          │
+        │                   User Action?                            │
+        │                  ┌────┬────┬────┐                         │
+        │         Create ──┤    │    │    ├── Delete                │
+        │                  │  View  Mark  │                         │
+        │                  │    │  Done   │                         │
+        │                  │    │    │    │                         │
+        │            ┌─────▼┐  │    │  ┌─▼──────┐                  │
+        │            │Display│  │    │  │ Show   │                  │
+        │            │  Add  │  │    │  │Confirm │                  │
+        │            │ Task  │  │    │  │ Dialog │                  │
+        ├─ Fill Form │Screen │  │    │  └─┬──────┘                  │
+        │  • Title   └─┬─────┘  │    │    │                         │
+        │  • Subject   │        │    │  ┌─▼──────┐                  │
+        │  • Type      │        │    │  │ Delete │                  │
+        │  • Date      │        │    │  │  Task  ├──────────────────┼─►Remove
+        │  • Priority  │        │    │  └─┬──────┘                  │
+        │              │        │    │    │                         │
+        ├─ Click Save ►│        │    │    │                         │
+        │              │        │    │    │                         │
+        │         ┌────▼────┐   │    │    │                         │
+        │         │ Validate│   │    │    │                         │
+        │         │  Input  │   │    │    │                         │
+        │         └────┬────┘   │    │    │                         │
+        │              │        │    │    │                         │
+        │         ◆────▼────◆   │    │    │                         │
+        │       All Fields OK?  │    │    │                         │
+        │         │         │   │    │    │                         │
+        │   Yes ──┤         ├No │    │    │                         │
+        │         │    ┌────▼──┐│    │    │                         │
+        │         │    │ Show  ││    │    │                         │
+        │         │    │Error  ││    │    │                         │
+        │         │    │Message││    │    │                         │
+        │         │    └────┬──┘│    │    │                         │
+        │         │         │   │    │    │                         │
+        │         │         └───┼────┘    │                         │
+        │         │             │         │                         │
+        │    ┌────▼─────┐       │         │                         │
+        │    │  Create  │       │         │                         │
+        │    │   Task   │       │         │                         │
+        │    │  Object  │       │         │                         │
+        │    └────┬─────┘       │    ┌────▼─────┐                  │
+        │         │             │    │ Toggle   │                  │
+        │    ┌────▼─────┐       │    │   Task   │                  │
+        │    │   Save   │       │    │ Complete │                  │
+        │    │   Task   ├───────┼────►  Status  │                  │
+        │    └────┬─────┘       │    └────┬─────┘                  │
+        │         │             │         │                         │
+        │         ├─────────────┼─────────┼── Update Storage ──────►│
+        │         │             │         │                         │
+        │    ┌────▼─────┐       │    ┌────▼─────┐                  │
+        │    │ Update   │       │    │  Move to │                  │
+        │    │Task List │       │    │Completed │                  │
+        │    │   and    │       │    │ Section  │                  │
+        │    │Statistics│       │    └────┬─────┘                  │
+        │    └────┬─────┘       │         │                         │
+        │         │             │         │                         │
+        │    ┌────▼─────┐       │    ┌────▼─────┐                  │
+        │    │  Show    │       │    │ Update   │                  │
+        │    │ Success  │       │    │Statistics│                  │
+        │    │ Message  │       │    └────┬─────┘                  │
+        │    └────┬─────┘       │         │                         │
+        │         │             │         │                         │
+        │         └──────┬──────┴─────────┘                         │
+        │                │                                          │
+        │           ┌────▼─────┐                                    │
+        │           │ Refresh  │                                    │
+        │           │  Task    │                                    │
+        │           │  View    │                                    │
+        │           └────┬─────┘                                    │
+        │                │                                          │
+        ◄── View Updated List                                       │
+        │                │                                          │
+        │           ◆────▼────◆                                     │
+        │         More Actions?                                     │
+        │           │         │                                     │
+        │    Yes ───┤         ├─── No                               │
+        │           │         │                                     │
+        │           └────┐    │                                     │
+        │                │    ●                                     │
+        │                │                                          │
+        └────────────────┘                                         End
+
+Legend:
+● = Start/End point
+◆ = Decision point
+┌─┐ = Activity/Process
+─► = Flow direction
+```
+
+**Key Activities:**
+1. User opens Planner screen
+2. System displays tasks with statistics
+3. User can:
+   - **Create** new task with full details
+   - **Mark** task as complete/incomplete
+   - **Delete** task with confirmation
+   - **View** tasks in list or calendar format
+4. System validates input for new tasks
+5. System updates local storage
+6. System refreshes task list and statistics
+
+**Decision Points:**
+- Which action to perform?
+- All required fields filled?
+- Continue with more actions?
+
+---
+
+## Activity Diagram 4: Study Session (Pomodoro Timer)
+
+**Purpose:** Illustrates the Pomodoro timer workflow for focused study sessions.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      STUDY SESSION (POMODORO) FLOW                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+       User                    ISLA System                    Timer Service
+        │                           │                               │
+        ●                           │                               │
+        │                           │                               │
+        ├── Navigate to Timer ─────►│                               │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │ Display │                          │
+        │                      │  Timer  │                          │
+        │                      │Interface│                          │
+        │                      │• 25:00  │                          │
+        │                      │• Subject│                          │
+        │                      │Selector │                          │
+        │                      └────┬────┘                          │
+        │                           │                               │
+        ├─ Select Subject ──────────►│                               │
+        │   (BCS2033, etc.)          │                               │
+        │                           │                               │
+        ├─ Click Start ─────────────►│                               │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │Initialize                          │
+        │                      │25-minute│                          │
+        │                      │  Timer  ├───────────────────────►  │
+        │                      └────┬────┘     Start Countdown      │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │ Update  │                          │
+        │                      │   UI:   │                          │
+        │                      │• Pause  │                          │
+        │                      │• Stop   │                          │
+        │                      │• Progress◄────── Timer Tick ───────┤
+        │                      │  Ring   │       (every second)     │
+        │                      └────┬────┘                          │
+        │                           │                               │
+        │                      ╔════▼════╗                          │
+        │                      ║ LOOP    ║                          │
+        │                      ║ Every   ║                          │
+        │                      ║ Second  ║                          │
+        │                      ╚════╤════╝                          │
+        │                           │                               │
+        │                      ┌────▼────┐                          │
+        │                      │Decrement│                          │
+        │                      │  Time   │                          │
+        │                      │24:59 →  │                          │
+        │                      │24:58... │                          │
+        │                      └────┬────┘                          │
+        │                           │                               │
+        │                      ◆────▼────◆                          │
+        │                   User Action?                            │
+        │                  ┌────┬────┬────┐                         │
+        │          Pause ──┤    │    │    ├── Stop                 │
+        │                  │Continue Time   │                       │
+        │                  │    │  Reaches  │                       │
+        │                  │    │   0:00?   │                       │
+        │         ┌────────▼┐   │     │  ┌─▼──────┐                │
+        │         │  Pause  │   │     │  │ Show   │                │
+        │         │  Timer  │   │     │  │Confirm │                │
+        │         └────┬────┘   │     │  │ Dialog │                │
+        │              │        │     │  └─┬──────┘                │
+        │         ┌────▼────┐   │     │    │                       │
+        │         │ Show    │   │     │  ◆─▼──◆                    │
+        │         │ Resume  │   │     │  Confirm?                  │
+        │         │ Button  │   │     │  │    │                    │
+        ├─ Click Resume       │     │ Yes  No                     │
+        │         │            │     │  │    │                    │
+        │         └────┬───────┘     │ ┌▼─────▼┐                  │
+        │              │             │ │ Stop   │                  │
+        │              └─────────────┼─► Timer │                  │
+        │                            │ └┬───────┘                  │
+        │                       ┌────▼──┴─┐  │                    │
+        │                       │ Record  │  │                    │
+        │                       │ Partial │  │                    │
+        │                       │ Session │  │                    │
+        │                       └────┬────┘  │                    │
+        │                            │       │                    │
+        │                            │       ● (End)              │
+        │                            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │  Timer  │                       │
+        │                       │Reached  │                       │
+        │                       │  0:00   │                       │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │  Play   │                       │
+        │                       │Notification                     │
+        │                       │  Sound  │                       │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        ◄─── Notification ───────────┤                            │
+        │    "Break Time!"            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │ Display │                       │
+        │                       │"Break   │                       │
+        │                       │ Time!"  │                       │
+        │                       │ Message │                       │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │  Start  │                       │
+        │                       │5-minute │                       │
+        │                       │  Break  ├────────────────────► │
+        │                       │  Timer  │    Start 5:00        │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        │                       ╔════▼════╗                       │
+        │                       ║  Break  ║                       │
+        │                       ║ Timer   ║                       │
+        │                       ║  Loop   ║                       │
+        │                       ╚════╤════╝                       │
+        │                            │                            │
+        │                       ◆────▼────◆                       │
+        │                    Skip Break?                          │
+        │                       │         │                       │
+        │               Yes ────┤         ├──── No (wait)         │
+        │                       │         │                       │
+        │                  ┌────▼────┐    │                       │
+        │                  │  Stop   │    │                       │
+        │                  │  Break  │    │                       │
+        │                  │  Timer  │    │                       │
+        │                  └────┬────┘    │                       │
+        │                       │         │                       │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │ Record  │                       │
+        │                       │Complete │                       │
+        │                       │ Session │                       │
+        │                       │  Data:  │                       │
+        │                       │• Subject│                       │
+        │                       │• Duration                       │
+        │                       │• Timestamp                      │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        │                       ┌────▼────┐                       │
+        │                       │ Display │                       │
+        │                       │ Session │                       │
+        │                       │Complete │                       │
+        │                       │ Summary │                       │
+        │                       └────┬────┘                       │
+        │                            │                            │
+        ◄── Show Summary ────────────┤                            │
+        │                            │                            │
+        │                            ●                            │
+        │                                                         │
+       End                                                       End
+
+Legend:
+● = Start/End point
+◆ = Decision point
+┌─┐ = Activity/Process
+╔═╗ = Loop/Iteration
+─► = Flow direction
+```
+
+**Key Activities:**
+1. User navigates to Timer screen
+2. User selects subject for study session
+3. User starts 25-minute focus timer
+4. System counts down every second
+5. User can pause/resume or stop early
+6. When timer completes, system plays notification
+7. System automatically starts 5-minute break timer
+8. User can skip break or wait for completion
+9. System records complete session data
+10. System displays session summary
+
+**Decision Points:**
+- User action during timer (continue/pause/stop)?
+- Stop early confirmation?
+- Skip break timer?
+
+**Loop:**
+- Timer countdown loop (every second)
+- Break timer countdown loop
+
+---
+
+## Activity Diagram 5: Upload Document
+
+**Purpose:** Shows the document upload workflow including validation and storage.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        UPLOAD DOCUMENT FLOW                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+     User                ISLA System            File System       Database
+      │                       │                      │                │
+      ●                       │                      │                │
+      │                       │                      │                │
+      ├─ Open Documents ─────►│                      │                │
+      │                       │                      │                │
+      │                  ┌────▼────┐                 │                │
+      │                  │ Display │                 │                │
+      │                  │Document │                 │                │
+      │                  │ Library │◄────────────────┼────────────────┤
+      │                  └────┬────┘  Fetch List     │                │
+      │                       │                      │                │
+      ├─ Click Upload FAB ────►│                      │                │
+      │                       │                      │                │
+      │                  ┌────▼────┐                 │                │
+      │                  │ Display │                 │                │
+      │                  │ Upload  │                 │                │
+      │                  │  Form:  │                 │                │
+      │                  │• Title  │                 │                │
+      │                  │• Subject│                 │                │
+      │                  │• Type   │                 │                │
+      │                  │• File   │                 │                │
+      │                  └────┬────┘                 │                │
+      │                       │                      │                │
+      ├─ Enter Document Title ►│                      │                │
+      │                       │                      │                │
+      ├─ Select Subject ──────►│                      │                │
+      │   (BCS2033, etc.)      │                      │                │
+      │                       │                      │                │
+      ├─ Choose Doc Type ─────►│                      │                │
+      │   (PDF/PPTX/DOCX)      │                      │                │
+      │                       │                      │                │
+      ├─ Click Choose File ───►│                      │                │
+      │                       │                      │                │
+      │                  ┌────▼────┐                 │                │
+      │                  │  Open   │                 │                │
+      │                  │  File   ├─────────────────►│                │
+      │                  │ Picker  │   System Dialog  │                │
+      │                  └────┬────┘                 │                │
+      │                       │                      │                │
+      │                       │   ◄──────────────────┤                │
+      │                       │     User Selects     │                │
+      │                       │                      │                │
+      │                  ┌────▼────┐                 │                │
+      │                  │ Display │                 │                │
+      │                  │Selected │                 │                │
+      │                  │ File    │                 │                │
+      │                  │ Name    │                 │                │
+      │                  └────┬────┘                 │                │
+      │                       │                      │                │
+      ├─ Click Upload Button ─►│                      │                │
+      │                       │                      │                │
+      │                  ┌────▼────┐                 │                │
+      │                  │ Validate│                 │                │
+      │                  │  Input  │                 │                │
+      │                  │ Fields  │                 │                │
+      │                  └────┬────┘                 │                │
+      │                       │                      │                │
+      │                  ◆────▼────◆                 │                │
+      │              All Fields OK?                  │                │
+      │                  │         │                 │                │
+      │          Yes ────┤         ├──── No          │                │
+      │                  │         │                 │                │
+      │                  │    ┌────▼────┐            │                │
+      │                  │    │Highlight│            │                │
+      │                  │    │ Missing │            │                │
+      │                  │    │ Fields  │            │                │
+      │                  │    └────┬────┘            │                │
+      │                  │         │                 │                │
+      │                  │         └─────┐           │                │
+      │                  │               │           │                │
+      │             ┌────▼────┐          │           │                │
+      │             │Validate │          │           │                │
+      │             │File Type│          │           │                │
+      │             └────┬────┘          │           │                │
+      │                  │               │           │                │
+      │             ◆────▼────◆          │           │                │
+      │         Supported Type?          │           │                │
+      │         (PDF/PPTX/DOCX)          │           │                │
+      │             │         │          │           │                │
+      │     Yes ────┤         ├──── No   │           │                │
+      │             │    ┌────▼────┐     │           │                │
+      │             │    │ Show    │     │           │                │
+      │             │    │"Unsupported   │           │                │
+      │             │    │File Type"     │           │                │
+      │             │    │ Error   │     │           │                │
+      │             │    └────┬────┘     │           │                │
+      │             │         │          │           │                │
+      │             │         └──────────┼───────────┘                │
+      │             │                    │                            │
+      │        ┌────▼────┐               │                            │
+      │        │Validate │               │                            │
+      │        │File Size│               │                            │
+      │        └────┬────┘               │                            │
+      │             │                    │                            │
+      │        ◆────▼────◆               │                            │
+      │       Size < 10MB?               │                            │
+      │        │         │               │                            │
+      │  Yes ──┤         ├──── No        │                            │
+      │        │    ┌────▼────┐          │                            │
+      │        │    │ Show    │          │                            │
+      │        │    │ "File   │          │                            │
+      │        │    │Too Large│          │                            │
+      │        │    │ Error   │          │                            │
+      │        │    └────┬────┘          │                            │
+      │        │         │               │                            │
+      │        │         └───────────────┼────────────►●              │
+      │        │                         │          (Error End)       │
+      │   ┌────▼────┐                    │                            │
+      │   │ Display │                    │                            │
+      │   │ Upload  │                    │                            │
+      │   │Progress │                    │                            │
+      │   │  Bar    │                    │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │  Read   │                    │                            │
+      │   │  File   ├────────────────────►│                            │
+      │   │  Data   │    Get File Data   │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │        │         ◄───────────────┤                            │
+      │        │           File Bytes    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │ [Future:│                    │                            │
+      │   │ Upload  │                    │                            │
+      │   │   to    │                    │                            │
+      │   │Firebase │                    │                            │
+      │   │Storage] │                    │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │ Create  │                    │                            │
+      │   │Document │                    │                            │
+      │   │Metadata:│                    │                            │
+      │   │• ID     │                    │                            │
+      │   │• Title  │                    │                            │
+      │   │• Subject│                    │                            │
+      │   │• Type   │                    │                            │
+      │   │• Date   │                    │                            │
+      │   │• Size   │                    │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │  Save   │                    │                            │
+      │   │Metadata ├────────────────────┼─────────────────────────► │
+      │   │   to    │                    │     Store Metadata        │
+      │   │Database │                    │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │ Display │                    │                            │
+      │   │ Success │                    │                            │
+      │   │ Message │                    │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      │   ┌────▼────┐                    │                            │
+      │   │ Refresh │                    │                            │
+      │   │Document │◄───────────────────┼─────────────────────────── │
+      │   │ Library │    Fetch Updated   │                            │
+      │   │  List   │       List         │                            │
+      │   └────┬────┘                    │                            │
+      │        │                         │                            │
+      ◄────────┤                         │                            │
+      │ View New Document                │                            │
+      │        │                         │                            │
+      │        ●                         │                            │
+      │                                  │                            │
+     End                                End                          End
+
+Legend:
+● = Start/End point
+◆ = Decision point
+┌─┐ = Activity/Process
+─► = Flow direction
+```
+
+**Key Activities:**
+1. User opens Documents screen
+2. User clicks upload button (FAB)
+3. User fills upload form (title, subject, type)
+4. User selects file from device
+5. System validates all input fields
+6. System validates file type (PDF/PPTX/DOCX only)
+7. System validates file size (< 10MB)
+8. System reads file data
+9. System creates document metadata
+10. System saves to database
+11. System refreshes document library
+
+**Decision Points:**
+- All fields filled?
+- Supported file type?
+- File size acceptable?
+
+**Validation Checks:**
+- Required field validation
+- File type validation (PDF, PPTX, DOCX)
+- File size limit (10MB maximum)
+
+---
+
+## Summary Table: Key Processes
+
+| Activity Diagram | Main Flow | Key Decision Points | Parallel Processes |
+|-----------------|-----------|---------------------|-------------------|
+| **1. Authentication** | Login → Validate → Navigate | Has account? Valid format? Auth success? | None |
+| **2. Generate Study Aids** | Select doc → Choose type → Process NLP → Display | Already generated? Extraction OK? Which algorithm? | NLP processing types |
+| **3. Manage Tasks** | View list → Create/Update/Delete → Refresh | Which action? Valid input? | None |
+| **4. Study Session** | Start timer → Countdown → Break → Record | Pause/Resume? Stop early? Skip break? | Timer loop |
+| **5. Upload Document** | Fill form → Choose file → Validate → Save | Valid fields? Valid type? Valid size? | File system access |
+
+---
+
+## Process Complexity Analysis
+
+| Process | Steps | Decision Points | User Interactions | System Complexity |
+|---------|-------|-----------------|-------------------|-------------------|
+| Authentication | 7 | 3 | 3 | Low |
+| Generate Study Aids | 12 | 4 | 5 | **High** |
+| Manage Tasks | 10 | 3 | 6 | Medium |
+| Study Session | 14 | 3 | 5 | Medium |
+| Upload Document | 11 | 4 | 6 | Medium |
+
+---
+
+## Technical Implementation Notes
+
+### 1. **State Management**
+- All activities use Flutter Provider for state management
+- State changes trigger UI updates automatically
+- State persists across screen navigation
+
+### 2. **Error Handling**
+- Input validation at multiple stages
+- User-friendly error messages
+- Graceful failure recovery
+
+### 3. **Performance Considerations**
+- Asynchronous operations for file I/O
+- Timer runs on separate isolate
+- NLP processing simulated with delays (future: actual implementation)
+
+### 4. **User Experience**
+- Loading indicators during processing
+- Progress bars for long operations
+- Confirmation dialogs for destructive actions
+- Immediate visual feedback
+
+---
+
+## Conclusion
+
+These activity diagrams illustrate the core workflows of the ISLA system, demonstrating:
+- **Clear process flows** from user action to system response
+- **Comprehensive error handling** at critical decision points
+- **User-centric design** with multiple interaction paths
+- **System robustness** through validation and confirmation steps
+- **Future scalability** with placeholder processes for Phase 2 features
+
+All diagrams reflect the **current prototype implementation** while documenting planned enhancements for production deployment.

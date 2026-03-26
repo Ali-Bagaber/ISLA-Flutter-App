@@ -1,0 +1,341 @@
+# Chapter 3: System Design
+
+## 3.2 Use Case Diagram and Specifications
+
+### Overview
+This section presents the use case diagram and detailed specifications for the ISLA (Intelligent Study and Learning Assistant) system, documenting all interactions between students and the system based on the prototype implementation.
+
+---
+
+## Use Case Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ISLA SYSTEM                                 │
+│                                                                     │
+│                                                                     │
+│      ┌─────────────────────┐                                       │
+│      │ Register / Login    │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+│      ┌─────────────────────┐                                       │
+│      │  Manage Profile     │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+│      ┌─────────────────────┐          ┌──────────────────┐        │
+│      │                     │◄─────────┤ Generate Summary │        │
+│      │  Generate Study     │  <<extends>>                 │        │
+│      │      Aids           │◄─────────┤ Generate         │        │
+│      │                     │ <<extends>> Flashcards      │        │
+│      └─────────────────────┘◄─────────┤                  │        │
+│                                <<extends>> Generate Quiz  │        │
+│                                         └──────────────────┘        │
+│      ┌─────────────────────┐                                       │
+│      │ Upload Study        │                                       │
+│      │   Documents         │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+│      ┌─────────────────────┐                                       │
+│      │  Manage Tasks &     │                                       │
+│      │     Exams           │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+│      ┌─────────────────────┐                                       │
+│      │ Start Study Session │                                       │
+│      │    (Pomodoro)       │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+│      ┌─────────────────────┐                                       │
+│      │ View Study          │                                       │
+│      │    Analytics        │                                       │
+│      └─────────────────────┘                                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+         ┌──────────┐
+         │          │
+         │ Student  │───────► All Use Cases
+         │  (User)  │
+         │          │
+         └──────────┘
+```
+
+---
+
+## Use Case Descriptions
+
+### UC01 – Register / Login
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC01 |
+| **Use Case Name** | Register / Login |
+| **Actor** | Student |
+| **Description** | Allows a student to register a new account or log in to the ISLA system using valid credentials. |
+| **Pre-condition** | • Student has installed the ISLA application<br>• Internet access available (for future Firebase integration) |
+| **Basic Flow** | 1. Student opens the ISLA application<br>2. System displays login screen<br>3. Student enters email and password<br>4. Student clicks "Login" button<br>5. System validates credentials (mock validation in prototype)<br>6. System navigates to Home screen<br>7. Use case ends |
+| **Alternative Flow [A1: Registration]** | 1. At step 3, student clicks "Register" link<br>2. System displays registration form<br>3. Student enters name, email, password, and confirms password<br>4. Student clicks "Register" button<br>5. System validates input fields<br>6. System creates new account (mock in prototype)<br>7. System navigates to Home screen<br>8. Use case ends |
+| **Exception Flow [E1: Invalid Credentials]** | 1. At step 5, system detects invalid email or password<br>2. System displays error message<br>3. Student re-enters correct credentials |
+| **Post-condition** | Student is successfully authenticated and logged into the system |
+| **Rules** | • Each user account must have a unique email address<br>• Password must meet minimum security requirements<br>• Authentication is required before accessing system features |
+| **Constraints** | • **Prototype Limitation:** Currently uses mock authentication with 1-second delay simulation<br>• Future implementation will use Firebase Authentication<br>• Requires internet connection for cloud authentication |
+| **Implementation Status** | ✅ **Completed** – UI and navigation implemented with mock authentication |
+
+---
+
+### UC02 – Manage Profile
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC02 |
+| **Use Case Name** | Manage Profile |
+| **Actor** | Student |
+| **Description** | Allows a logged-in student to view and edit personal profile information including name, student ID, faculty, year, and semester. |
+| **Pre-condition** | Student is logged in to the ISLA system |
+| **Basic Flow** | 1. Student navigates to Dashboard (Profile) screen via bottom navigation<br>2. System displays profile card with current information:<br>   - Name: "Ahmad Student"<br>   - Student ID: "CB21088"<br>   - Faculty: "FKOM"<br>   - Year & Semester: "Year 3 • Semester 1"<br>3. Student clicks edit icon (pencil) on profile card<br>4. System displays profile editing form<br>5. Student updates information<br>6. Student clicks "Save" button<br>7. System validates input<br>8. System updates profile data<br>9. System displays success message<br>10. Updated profile appears on dashboard<br>11. Use case ends |
+| **Exception Flow [E1: Validation Error]** | 1. At step 7, system detects invalid or empty required fields<br>2. System highlights error fields<br>3. System displays validation error message<br>4. Student corrects input and retries |
+| **Post-condition** | Profile information is updated and displayed on dashboard |
+| **Rules** | • Only the logged-in user can modify their own profile<br>• Student ID cannot be changed once set<br>• Name and faculty are mandatory fields |
+| **Constraints** | • **Prototype Limitation:** Edit button exists but functionality not yet implemented<br>• Profile data is currently static/hardcoded<br>• Future: Data will be synchronized with Cloud Firestore |
+| **Implementation Status** | 🔶 **Partial** – Profile display completed, edit functionality planned for Phase 2 |
+
+---
+
+### UC03 – Upload Study Documents
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC03 |
+| **Use Case Name** | Upload Study Documents |
+| **Actor** | Student |
+| **Description** | Allows the student to upload study-related documents (PDF, PPTX, DOCX) for processing and storage. |
+| **Pre-condition** | Student is logged in to the ISLA system |
+| **Basic Flow** | 1. Student navigates to Documents screen<br>2. Student clicks "Upload" button (FAB)<br>3. System displays upload document screen<br>4. Student enters document title<br>5. Student selects subject from dropdown (BCS2033, BCS3012, etc.)<br>6. Student selects document type (PDF/PPTX/DOCX)<br>7. Student clicks "Choose File" button<br>8. System displays file picker dialog<br>9. Student selects document file<br>10. Student clicks "Upload" button<br>11. System validates file type and size<br>12. System displays upload progress<br>13. System saves document metadata<br>14. System displays success message<br>15. Document appears in library list<br>16. Use case ends |
+| **Alternative Flow [A1: Unsupported File Format]** | 1. At step 11, system detects unsupported file type<br>2. System displays error "Only PDF, PPTX, and DOCX files are supported"<br>3. Student selects a supported file format |
+| **Alternative Flow [A2: File Too Large]** | 1. At step 11, system detects file exceeds size limit<br>2. System displays error "File size must be less than 10MB"<br>3. Student selects a smaller file |
+| **Post-condition** | Document is stored and available for study aid generation |
+| **Rules** | • Only supported file formats are accepted (PDF, PPTX, DOCX)<br>• File size limit: 10MB<br>• Documents must be associated with a subject |
+| **Constraints** | • **Prototype Limitation:** Upload UI exists but file picker not implemented<br>• Currently uses mock/sample documents<br>• Future: Will integrate with Firebase Storage |
+| **Implementation Status** | 🔶 **Partial** – Upload UI screen created, file system integration pending |
+
+---
+
+### UC04 – Generate Study Aids
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC04 |
+| **Use Case Name** | Generate Study Aids |
+| **Actor** | Student |
+| **Description** | Allows the student to generate AI-powered study aids (summaries, flashcards, or quizzes) from uploaded documents using internal NLP processing. |
+| **Pre-condition** | • Student is logged in<br>• At least one study document exists in library |
+| **Basic Flow** | 1. Student navigates to Documents screen<br>2. Student selects a document from library<br>3. System displays document detail screen with options:<br>   - Generate Summary<br>   - Generate Flashcards<br>   - Generate Quiz<br>4. Student selects desired study aid type<br>5. System navigates to respective screen<br>6. System displays "Generating..." indicator<br>7. **System processes document using internal NLP algorithms:**<br>   - Extracts text from document<br>   - Applies lightweight NLP (TextRank/RAKE/YAKE)<br>   - Generates content based on selected type<br>8. System displays generated study aid<br>9. Student can review, study, or save the content<br>10. Use case ends |
+| **Alternative Flow [A1: View Existing Study Aid]** | 1. At step 4, if study aid already exists<br>2. System retrieves previously generated content<br>3. Skip to step 8 |
+| **Exception Flow [E1: Processing Failed]** | 1. At step 7, system fails to extract text or process document<br>2. System displays error message<br>3. System suggests selecting another document<br>4. Use case ends |
+| **Post-condition** | Selected study aids are generated and available for review |
+| **Rules** | • A document must exist before generating study aids<br>• NLP processing is done locally within the app<br>• Generated content is based on document text quality |
+| **Constraints** | • **All NLP processing is internal** – No external AI APIs used<br>• Uses lightweight algorithms: TextRank, RAKE, YAKE<br>• Processing time depends on document size<br>• Quality depends on document text extractability |
+| **Implementation Status** | ✅ **Completed** – All three study aid types implemented with mock NLP simulation |
+
+**This use case extends into three sub-use cases:**
+
+---
+
+### UC04a – Generate Summary
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC04a |
+| **Use Case Name** | Generate Summary |
+| **Extends** | UC04 – Generate Study Aids |
+| **Actor** | Student |
+| **Trigger** | Student selects "Generate Summary" from document detail screen |
+| **Description** | System generates an extractive summary from the selected document using TextRank algorithm. |
+| **Basic Flow** | 1. System extracts text from document<br>2. System applies **TextRank algorithm** to identify key sentences<br>3. System ranks sentences by importance<br>4. System selects top 5-10 most important sentences<br>5. System formats summary with key points<br>6. Summary is displayed to the student |
+| **Alternative Flow [A1: Document Too Short]** | 1. System detects document has fewer than 5 sentences<br>2. System displays message "Document too short to summarize"<br>3. Use case ends |
+| **Rules** | • Summary is extractive, not generative (selects existing sentences)<br>• Maximum 10 key points per summary<br>• Maintains original sentence structure |
+| **Constraints** | • Depends on document text quality and length<br>• TextRank algorithm runs locally in Dart<br>• No external API calls |
+| **Implementation Status** | ✅ **Completed** – Mock summary generation with 2-second delay simulation |
+
+---
+
+### UC04b – Generate Flashcards
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC04b |
+| **Use Case Name** | Generate Flashcards |
+| **Extends** | UC04 – Generate Study Aids |
+| **Actor** | Student |
+| **Trigger** | Student selects "Generate Flashcards" from document detail screen |
+| **Description** | System generates question-answer flashcards from the document using RAKE/YAKE keyword extraction algorithms. |
+| **Basic Flow** | 1. System extracts text from document<br>2. System applies **RAKE algorithm** to identify keyword phrases<br>3. System applies **YAKE algorithm** for enhanced keyword scoring<br>4. System creates flashcards: Front (question), Back (answer/definition)<br>5. System generates 5-15 flashcards<br>6. Flashcards are displayed in flip-card format<br>7. Student can flip cards, navigate next/previous, shuffle |
+| **Alternative Flow [A1: Extraction Failure]** | 1. System fails to extract sufficient keywords<br>2. System notifies user "Not enough content to generate flashcards"<br>3. System allows user to try another document |
+| **Rules** | • Flashcards are based on extracted keywords and context<br>• Minimum 5 flashcards, maximum 15 per document<br>• Questions are derived from key concepts |
+| **Constraints** | • Limited by NLP accuracy of keyword extraction<br>• RAKE/YAKE algorithms run locally<br>• Quality depends on document structure |
+| **Implementation Status** | ✅ **Completed** – 5 mock flashcards with flip animation |
+
+---
+
+### UC04c – Generate Quiz
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC04c |
+| **Use Case Name** | Generate Quiz |
+| **Extends** | UC04 – Generate Study Aids |
+| **Actor** | Student |
+| **Trigger** | Student selects "Generate Quiz" from document detail screen |
+| **Description** | System generates multiple-choice quiz questions from the document content. |
+| **Basic Flow** | 1. System extracts text and identifies key concepts<br>2. System generates questions based on important statements<br>3. System creates 3 distractor options for each question<br>4. System generates 5-10 quiz questions<br>5. Quiz is displayed to the student<br>6. Student answers questions one by one<br>7. System tracks answers<br>8. After completion, system calculates score<br>9. System displays results with correct answers |
+| **Alternative Flow [A1: Retake Quiz]** | 1. Student selects "Retake Quiz"<br>2. System resets all answers<br>3. Student attempts quiz again |
+| **Alternative Flow [A2: Insufficient Data]** | 1. System cannot identify enough concepts<br>2. System suggests selecting another document<br>3. Use case ends |
+| **Rules** | • Quiz questions are objective-based (multiple-choice)<br>• Each question has 4 options (1 correct, 3 distractors)<br>• Score is calculated as percentage |
+| **Constraints** | • Quiz difficulty depends on source content complexity<br>• Question generation uses keyword extraction<br>• Minimum 5 questions required |
+| **Implementation Status** | ✅ **Completed** – Mock quiz with 5 questions and score calculation |
+
+---
+
+### UC05 – Manage Tasks & Exams
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC05 |
+| **Use Case Name** | Manage Tasks & Exams |
+| **Actor** | Student |
+| **Description** | Allows the student to create, view, update, and delete study tasks and exam schedules in List and Calendar views. |
+| **Pre-condition** | Student is logged in to the ISLA system |
+| **Basic Flow** | 1. Student navigates to Planner screen<br>2. System displays tasks in List View (default) or Calendar View<br>3. Student can view:<br>   - Pending tasks section<br>   - Completed tasks section<br>   - Quick statistics (total, completed, pending)<br>4. Student clicks "+" FAB to create new task<br>5. System displays Add Task screen<br>6. Student enters task details:<br>   - Task title<br>   - Subject (BCS2033, BCS3012, etc.)<br>   - Type (Assignment/Exam/Revision)<br>   - Due date (date picker)<br>   - Priority (High/Medium/Low)<br>   - Description (optional)<br>7. Student clicks "Save" button<br>8. System validates input fields<br>9. System saves task<br>10. System displays success message<br>11. Task appears in appropriate section<br>12. Use case ends |
+| **Alternative Flow [A1: Mark Task as Complete]** | 1. At step 3, student taps checkbox on a task<br>2. System marks task as completed<br>3. Task moves to "Completed Tasks" section<br>4. System updates statistics |
+| **Alternative Flow [A2: View Calendar]** | 1. At step 2, student switches to "Calendar" tab<br>2. System displays monthly calendar<br>3. System marks dates with colored dots (tasks present)<br>4. Student selects a date<br>5. System displays tasks for that date below calendar |
+| **Alternative Flow [A3: Delete Task]** | 1. Student long-presses on a task<br>2. System displays delete confirmation dialog<br>3. Student confirms deletion<br>4. System removes task from list |
+| **Exception Flow [E1: Missing Required Fields]** | 1. At step 8, required fields are empty<br>2. System highlights missing fields in red<br>3. System displays error "Please fill all required fields"<br>4. Student completes missing information |
+| **Post-condition** | Task is created/updated/deleted and changes are reflected in planner view |
+| **Rules** | • Tasks must include title, subject, type, due date, and priority<br>• Only the task owner can modify their tasks<br>• Tasks are organized by completion status |
+| **Constraints** | • **Prototype:** Tasks stored in local state (not persisted)<br>• Future: Tasks will sync with Cloud Firestore<br>• Calendar uses table_calendar package |
+| **Implementation Status** | ✅ **Completed** – Full CRUD operations with List & Calendar views |
+
+---
+
+### UC06 – Start Study Session
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC06 |
+| **Use Case Name** | Start Study Session (Pomodoro Timer) |
+| **Actor** | Student |
+| **Description** | Allows the student to start a timed study session using the Pomodoro technique (25 minutes work, 5 minutes break). |
+| **Pre-condition** | Student is logged in to the ISLA system |
+| **Basic Flow** | 1. Student navigates to Timer screen<br>2. System displays timer interface:<br>   - Large countdown display (25:00)<br>   - Subject selector dropdown<br>   - Session type indicator (Focus/Break)<br>3. Student selects subject from dropdown (BCS2033, BCS3012, etc.)<br>4. Student clicks "Start" button<br>5. System starts 25-minute countdown timer<br>6. System displays:<br>   - Current time counting down<br>   - Progress ring animation<br>   - Pause and Stop buttons<br>7. Timer counts down: 24:59 → 24:58 → ... → 00:00<br>8. When timer reaches 0:00:<br>9. System plays notification sound<br>10. System displays "Break Time!" message<br>11. System starts 5-minute break timer<br>12. Break timer counts down to 0:00<br>13. System records session data<br>14. System displays session complete summary<br>15. Use case ends |
+| **Alternative Flow [A1: Pause Session]** | 1. At step 6, student clicks "Pause" button<br>2. System pauses timer<br>3. System displays "Resume" button<br>4. Student clicks "Resume"<br>5. System continues countdown from paused time |
+| **Alternative Flow [A2: Stop Session Early]** | 1. At step 6, student clicks "Stop" button<br>2. System displays confirmation dialog<br>3. Student confirms stop<br>4. System records partial session time<br>5. Use case ends |
+| **Alternative Flow [A3: Skip Break]** | 1. At step 11, student clicks "Skip Break" button<br>2. System ends break timer immediately<br>3. Continue to step 13 |
+| **Post-condition** | Study session data is recorded and statistics are updated |
+| **Rules** | • Only one active study session at a time<br>• Standard Pomodoro: 25 minutes focus + 5 minutes break<br>• Sessions must be associated with a subject |
+| **Constraints** | • Timer accuracy depends on device performance<br>• **Prototype:** Session data not persisted<br>• Future: Sessions will sync to Cloud Firestore for analytics |
+| **Implementation Status** | ✅ **Completed** – Fully functional Pomodoro timer with pause/resume/stop |
+
+---
+
+### UC07 – View Study Analytics
+
+| Field | Description |
+|-------|-------------|
+| **Use Case ID** | UC07 |
+| **Use Case Name** | View Study Analytics & Performance Dashboard |
+| **Actor** | Student |
+| **Description** | Allows the student to view comprehensive analytics including study time, GPA, tasks, and productivity metrics on the Dashboard screen. |
+| **Pre-condition** | • Student is logged in<br>• Some study activity has been recorded (for meaningful analytics) |
+| **Basic Flow** | 1. Student navigates to Dashboard screen via bottom navigation<br>2. System displays comprehensive dashboard with:<br>   **a. Profile Card:**<br>   - Student name and ID<br>   - Faculty and Year/Semester<br>   - Edit button<br>   **b. Academic Performance Section:**<br>   - Current GPA card with trend indicator<br>   - CGPA card with trend indicator<br>   **c. Study Statistics:**<br>   - Total study time this week<br>   - Number of study sessions<br>   - Documents uploaded count<br>   - Quizzes attempted count<br>   **d. Study Time by Subject:**<br>   - Progress bars showing hours per subject<br>   - Visual comparison across subjects (BCS2033, BCS3012, etc.)<br>   **e. This Week Activity:**<br>   - Bar chart showing daily study hours (Mon-Sun)<br>   - Highlights most productive day<br>3. Student can tap "Calculate GPA" card<br>4. System navigates to GPA Calculator screen<br>5. Student can view detailed analytics<br>6. Use case ends |
+| **Alternative Flow [A1: Calculate/Update GPA]** | 1. At step 3, student taps "GPA Calculator" card<br>2. System displays GPA calculation screen with:<br>   - List of courses with grades and credits<br>   - Add course button<br>3. Student adds/edits course information<br>4. Student assigns grades (A, A-, B+, B, etc.)<br>5. System automatically calculates GPA<br>6. System displays calculated GPA/CGPA with visual indicators |
+| **Exception Flow [E1: No Data Available]** | 1. At step 2, system detects no study activity<br>2. System displays empty state messages<br>3. System shows "Start studying to see your analytics" prompts |
+| **Post-condition** | Study analytics and performance metrics are displayed |
+| **Rules** | • Analytics are based only on recorded activities<br>• GPA calculation follows standard grade point scale<br>• Data is shown per individual user |
+| **Constraints** | • **Prototype:** All data is mock/hardcoded<br>• Accuracy depends on user activity consistency<br>• Requires stored historical data for trends<br>• Future: Will retrieve data from Cloud Firestore |
+| **Implementation Status** | ✅ **Completed** – Full dashboard with mock analytics data |
+
+---
+
+## Implementation Summary
+
+| Use Case | Status | Notes |
+|----------|--------|-------|
+| UC01: Register/Login | ✅ Complete | Mock authentication with navigation |
+| UC02: Manage Profile | 🔶 Partial | Display complete, edit pending |
+| UC03: Upload Documents | 🔶 Partial | UI complete, file system integration pending |
+| UC04: Generate Study Aids | ✅ Complete | Mock NLP simulation (all 3 types) |
+| UC04a: Generate Summary | ✅ Complete | Mock TextRank output |
+| UC04b: Generate Flashcards | ✅ Complete | Mock RAKE/YAKE output |
+| UC04c: Generate Quiz | ✅ Complete | Mock quiz with scoring |
+| UC05: Manage Tasks & Exams | ✅ Complete | Full CRUD with calendar view |
+| UC06: Start Study Session | ✅ Complete | Pomodoro timer functional |
+| UC07: View Study Analytics | ✅ Complete | Dashboard with mock data |
+
+---
+
+## Key Technical Notes
+
+### 1. **Internal NLP Processing (No External AI)**
+All study aid generation (UC04, UC04a, UC04b, UC04c) uses:
+- ✅ **TextRank** for extractive summarization
+- ✅ **RAKE** (Rapid Automatic Keyword Extraction)
+- ✅ **YAKE** (Yet Another Keyword Extractor)
+- ❌ **No external AI APIs** (GPT, Claude, etc.)
+- ✅ **Offline-capable** after document download
+
+### 2. **Prototype vs Production**
+**Current Prototype:**
+- Mock authentication (1-second delay simulation)
+- Hardcoded sample documents
+- Static profile data
+- In-memory task storage (not persisted)
+- Mock study session data
+- Simulated NLP processing (2-second delay)
+
+**Future Production (Phase 2):**
+- Firebase Authentication integration
+- Firebase Storage for documents
+- Cloud Firestore for data persistence
+- Actual NLP algorithm implementation
+- Real-time data synchronization
+
+### 3. **Technology Stack**
+- **Frontend:** Flutter 3.x (Dart)
+- **State Management:** Provider 6.1.1
+- **UI Components:** Material 3
+- **Calendar:** table_calendar 3.0.9
+- **Theme:** Custom dark/light theme system
+- **Backend (Future):** Firebase (Auth, Firestore, Storage)
+
+---
+
+## Use Case Relationships
+
+### Includes:
+- UC04a, UC04b, UC04c → **include** → UC03 (requires document upload)
+- UC07 → **include** → UC06 (analytics depend on study sessions)
+
+### Extends:
+- UC04a (Generate Summary) → **extends** → UC04 (Generate Study Aids)
+- UC04b (Generate Flashcards) → **extends** → UC04 (Generate Study Aids)
+- UC04c (Generate Quiz) → **extends** → UC04 (Generate Study Aids)
+
+---
+
+## Prototype Limitations & Future Work
+
+| Feature | Current Status | Future Enhancement |
+|---------|---------------|-------------------|
+| Authentication | Mock login/logout | Firebase Authentication |
+| Document Upload | UI only | File picker + Firebase Storage |
+| NLP Processing | Mock simulation | Actual TextRank/RAKE/YAKE implementation |
+| Data Persistence | In-memory only | Cloud Firestore synchronization |
+| Profile Editing | Button exists, no function | Full edit form with validation |
+| Offline Mode | Partially supported | Full offline-first architecture |
+| Notifications | Not implemented | Push notifications for tasks/breaks |
+
+---
+
+## Conclusion
+
+This use case documentation reflects the **actual prototype implementation** of the ISLA system. All use cases marked as ✅ Complete have functional UI and mock data flows. The system demonstrates the core concept and user flows, ready for Phase 2 backend integration and NLP algorithm implementation.

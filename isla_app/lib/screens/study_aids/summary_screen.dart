@@ -154,13 +154,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   const SizedBox(height: 24),
 
                   // Summary Stats
-                  Row(
+                  const Row(
                     children: [
                       _StatChip(
                         icon: Icons.article_outlined,
                         label: '5 Key Points',
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       _StatChip(
                         icon: Icons.timer_outlined,
                         label: '3 min read',

@@ -213,13 +213,13 @@ class _QuizScreenState extends State<QuizScreen> {
                   value: '${_questions.length}',
                 ),
                 const Divider(height: 24),
-                _QuizInfoRow(
+                const _QuizInfoRow(
                   icon: Icons.timer_outlined,
                   label: 'Est. Time',
                   value: '5 minutes',
                 ),
                 const Divider(height: 24),
-                _QuizInfoRow(
+                const _QuizInfoRow(
                   icon: Icons.emoji_events_outlined,
                   label: 'Pass Score',
                   value: '60%',

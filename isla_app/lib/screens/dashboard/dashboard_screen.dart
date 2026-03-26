@@ -587,7 +587,7 @@ class _DayActivity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = 60.0;
+    const maxHeight = 60.0;
     final barHeight = hours > 0 ? (hours / 5) * maxHeight : 4.0;
 
     return Column(

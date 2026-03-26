@@ -185,7 +185,7 @@ class _PlannerScreenState extends State<PlannerScreen>
           const SizedBox(height: 12),
 
           if (pendingTasks.isEmpty)
-            _EmptyState(
+            const _EmptyState(
               icon: Icons.task_alt_rounded,
               message: 'No pending tasks!',
             )
@@ -292,7 +292,7 @@ class _PlannerScreenState extends State<PlannerScreen>
                 const SizedBox(height: 12),
                 Expanded(
                   child: _getEventsForDay(_selectedDay ?? _focusedDay).isEmpty
-                      ? _EmptyState(
+                      ? const _EmptyState(
                           icon: Icons.event_available_rounded,
                           message: 'No tasks for this day',
                         )

@@ -152,7 +152,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
             Text('Select Subject', style: AppTheme.labelMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedSubject,
+              initialValue: _selectedSubject,
               decoration: const InputDecoration(
                 hintText: 'Choose a subject',
                 prefixIcon: Icon(Icons.folder_outlined),
@@ -212,15 +212,15 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _AIOptionCheckbox(
+                  const _AIOptionCheckbox(
                     title: 'Auto-generate summary',
                     subtitle: 'Create summary after upload',
                   ),
-                  _AIOptionCheckbox(
+                  const _AIOptionCheckbox(
                     title: 'Generate flashcards',
                     subtitle: 'Create flashcards automatically',
                   ),
-                  _AIOptionCheckbox(
+                  const _AIOptionCheckbox(
                     title: 'Generate quiz',
                     subtitle: 'Create quiz questions',
                   ),

@@ -17,7 +17,7 @@ class _TimerScreenState extends State<TimerScreen>
   int _workDuration = 25; // minutes
   int _breakDuration = 5; // minutes
   int _longBreakDuration = 15; // minutes
-  int _sessionsBeforeLongBreak = 4;
+  final int _sessionsBeforeLongBreak = 4;
 
   // Timer state
   int _currentSeconds = 25 * 60;
@@ -227,7 +227,7 @@ class _TimerScreenState extends State<TimerScreen>
                 alignment: Alignment.center,
                 children: [
                   // Background Circle
-                  SizedBox(
+                  const SizedBox(
                     width: 280,
                     height: 280,
                     child: CircularProgressIndicator(

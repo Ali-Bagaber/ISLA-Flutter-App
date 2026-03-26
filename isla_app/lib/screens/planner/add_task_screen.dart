@@ -168,7 +168,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               Text('Task Type', style: AppTheme.labelMedium),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _selectedType,
+                initialValue: _selectedType,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
@@ -363,7 +363,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                       value: _setReminder,
                       onChanged: (value) =>
                           setState(() => _setReminder = value),
-                      activeColor: AppTheme.primaryColor,
+                      activeThumbColor: AppTheme.primaryColor,
                     ),
                   ],
                 ),

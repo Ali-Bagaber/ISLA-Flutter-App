@@ -227,15 +227,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
                               Icon(
                                 Icons.timer_outlined,
                                 color: Colors.white,
                                 size: 16,
                               ),
-                              const SizedBox(width: 6),
-                              const Text(
+                              SizedBox(width: 6),
+                              Text(
                                 '25:00',
                                 style: TextStyle(
                                   color: Colors.white,
@@ -311,20 +311,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
+                    const Row(
                       children: [
                         _ProgressItem(
                           icon: Icons.description_outlined,
                           label: 'Documents',
                           value: '5',
                         ),
-                        const SizedBox(width: 24),
+                        SizedBox(width: 24),
                         _ProgressItem(
                           icon: Icons.quiz_outlined,
                           label: 'Quizzes',
                           value: '3',
                         ),
-                        const SizedBox(width: 24),
+                        SizedBox(width: 24),
                         _ProgressItem(
                           icon: Icons.task_alt_outlined,
                           label: 'Tasks',

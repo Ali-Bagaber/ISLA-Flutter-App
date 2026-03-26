@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/theme_provider.dart';
 
 class GPACalculatorScreen extends StatefulWidget {
   const GPACalculatorScreen({super.key});
@@ -211,7 +209,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.school_outlined,
                           size: 64,
                           color: AppTheme.textLight,

@@ -50,7 +50,7 @@ class AppTheme {
   static Color getSurfaceColor(bool isDark) => isDark ? darkSurface : lightSurface;
   static Color getTextPrimary(bool isDark) => isDark ? darkText : lightText;
   static Color getTextSecondary(bool isDark) => isDark ? darkTextSecondary : lightTextSecondary;
-  static Color getTextLight(bool isDark) => isDark ? Color(0xFF808080) : Color(0xFF9CA3AF);
+  static Color getTextLight(bool isDark) => isDark ? const Color(0xFF808080) : const Color(0xFF9CA3AF);
 
   // Text Styles
   static TextStyle get headingLarge => GoogleFonts.poppins(

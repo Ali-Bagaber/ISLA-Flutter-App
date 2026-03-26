@@ -12,7 +12,8 @@ class PlannerScreen extends StatefulWidget {
   State<PlannerScreen> createState() => _PlannerScreenState();
 }
 
-class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProviderStateMixin {
+class _PlannerScreenState extends State<PlannerScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -91,7 +92,7 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
@@ -162,7 +163,8 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
               Expanded(
                 child: _StatCard(
                   icon: Icons.priority_high_rounded,
-                  value: '${pendingTasks.where((t) => t['priority'] == 'High').length}',
+                  value:
+                      '${pendingTasks.where((t) => t['priority'] == 'High').length}',
                   label: 'Urgent',
                   color: AppTheme.error,
                   isDark: isDark,
@@ -170,18 +172,18 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Pending Tasks
           Text(
-            'Pending Tasks', 
+            'Pending Tasks',
             style: AppTheme.headingSmall.copyWith(
               color: AppTheme.getTextPrimary(isDark),
             ),
           ),
           const SizedBox(height: 12),
-          
+
           if (pendingTasks.isEmpty)
             _EmptyState(
               icon: Icons.task_alt_rounded,
@@ -189,35 +191,35 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
             )
           else
             ...pendingTasks.map((task) => _TaskCard(
-              task: task,
-              isDark: isDark,
-              onToggle: () {
-                setState(() {
-                  task['completed'] = !task['completed'];
-                });
-              },
-            )),
-          
+                  task: task,
+                  isDark: isDark,
+                  onToggle: () {
+                    setState(() {
+                      task['completed'] = !task['completed'];
+                    });
+                  },
+                )),
+
           const SizedBox(height: 24),
-          
+
           // Completed Tasks
           if (completedTasks.isNotEmpty) ...[
             Text(
-              'Completed', 
+              'Completed',
               style: AppTheme.headingSmall.copyWith(
                 color: AppTheme.getTextPrimary(isDark),
               ),
             ),
             const SizedBox(height: 12),
             ...completedTasks.map((task) => _TaskCard(
-              task: task,
-              isDark: isDark,
-              onToggle: () {
-                setState(() {
-                  task['completed'] = !task['completed'];
-                });
-              },
-            )),
+                  task: task,
+                  isDark: isDark,
+                  onToggle: () {
+                    setState(() {
+                      task['completed'] = !task['completed'];
+                    });
+                  },
+                )),
           ],
         ],
       ),
@@ -275,7 +277,7 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
             },
           ),
         ),
-        
+
         // Selected Day Tasks
         Expanded(
           child: Container(
@@ -295,9 +297,12 @@ class _PlannerScreenState extends State<PlannerScreen> with SingleTickerProvider
                           message: 'No tasks for this day',
                         )
                       : ListView.builder(
-                          itemCount: _getEventsForDay(_selectedDay ?? _focusedDay).length,
+                          itemCount:
+                              _getEventsForDay(_selectedDay ?? _focusedDay)
+                                  .length,
                           itemBuilder: (context, index) {
-                            final task = _getEventsForDay(_selectedDay ?? _focusedDay)[index];
+                            final task = _getEventsForDay(
+                                _selectedDay ?? _focusedDay)[index];
                             return _TaskCard(
                               task: task,
                               onToggle: () {
@@ -351,7 +356,7 @@ class _StatCard extends StatelessWidget {
             style: AppTheme.headingMedium.copyWith(color: color),
           ),
           Text(
-            label, 
+            label,
             style: AppTheme.bodySmall.copyWith(
               color: AppTheme.getTextSecondary(isDark),
             ),
@@ -368,7 +373,7 @@ class _TaskCard extends StatelessWidget {
   final bool isDark;
 
   const _TaskCard({
-    required this.task, 
+    required this.task,
     required this.onToggle,
     required this.isDark,
   });
@@ -376,7 +381,7 @@ class _TaskCard extends StatelessWidget {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = date.difference(now).inDays;
-    
+
     if (difference == 0) return 'Today';
     if (difference == 1) return 'Tomorrow';
     if (difference < 0) return 'Overdue';
@@ -388,7 +393,7 @@ class _TaskCard extends StatelessWidget {
     final isCompleted = task['completed'] as bool;
     final dueDate = task['dueDate'] as DateTime;
     final isOverdue = dueDate.isBefore(DateTime.now()) && !isCompleted;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -413,14 +418,11 @@ class _TaskCard extends StatelessWidget {
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: isCompleted
-                        ? AppTheme.success
-                        : Colors.transparent,
+                    color: isCompleted ? AppTheme.success : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: isCompleted
-                          ? AppTheme.success
-                          : AppTheme.textLight,
+                      color:
+                          isCompleted ? AppTheme.success : AppTheme.textLight,
                       width: 2,
                     ),
                   ),
@@ -430,7 +432,7 @@ class _TaskCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Task Info
               Expanded(
                 child: Column(
@@ -439,9 +441,8 @@ class _TaskCard extends StatelessWidget {
                     Text(
                       task['title'],
                       style: AppTheme.labelMedium.copyWith(
-                        decoration: isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
+                        decoration:
+                            isCompleted ? TextDecoration.lineThrough : null,
                         color: isCompleted
                             ? AppTheme.textLight
                             : AppTheme.textPrimary,
@@ -488,7 +489,7 @@ class _TaskCard extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Due Date
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -502,8 +503,10 @@ class _TaskCard extends StatelessWidget {
                   Text(
                     _formatDate(dueDate),
                     style: AppTheme.bodySmall.copyWith(
-                      color: isOverdue ? AppTheme.error : AppTheme.textSecondary,
-                      fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
+                      color:
+                          isOverdue ? AppTheme.error : AppTheme.textSecondary,
+                      fontWeight:
+                          isOverdue ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                 ],
@@ -530,7 +533,9 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(icon, size: 48, color: AppTheme.textLight),
           const SizedBox(height: 12),
-          Text(message, style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary)),
+          Text(message,
+              style:
+                  AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary)),
         ],
       ),
     );

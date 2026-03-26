@@ -14,9 +14,15 @@ class StudyLibraryScreen extends StatefulWidget {
 class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
   String _selectedTab = 'All Materials';
   String? _selectedTopic;
-  
-  final List<String> _tabs = ['All Materials', 'Summaries', 'Flashcards', 'Quizzes', 'Notes'];
-  
+
+  final List<String> _tabs = [
+    'All Materials',
+    'Summaries',
+    'Flashcards',
+    'Quizzes',
+    'Notes'
+  ];
+
   final List<Map<String, dynamic>> _topics = [
     {
       'name': 'Data Structures',
@@ -43,7 +49,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
       'materials': 10,
     },
   ];
-  
+
   final List<Map<String, dynamic>> _allMaterials = [
     {
       'title': 'Introduction to Data Structures',
@@ -126,15 +132,15 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
       'icon': Icons.style_rounded,
     },
   ];
-  
+
   List<Map<String, dynamic>> get _filteredMaterials {
     var materials = _allMaterials;
-    
+
     // Filter by topic
     if (_selectedTopic != null) {
       materials = materials.where((m) => m['topic'] == _selectedTopic).toList();
     }
-    
+
     // Filter by tab
     if (_selectedTab != 'All Materials') {
       if (_selectedTab == 'Summaries') {
@@ -145,7 +151,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
         materials = materials.where((m) => m['type'] == 'Quiz').toList();
       }
     }
-    
+
     return materials;
   }
 
@@ -209,7 +215,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                     ],
                   ),
                 ),
-                
+
                 // Topics List
                 Expanded(
                   child: ListView.builder(
@@ -233,7 +239,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                     },
                   ),
                 ),
-                
+
                 // Add Topic Button
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -251,7 +257,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
               ],
             ),
           ),
-          
+
           // Main Content Area
           Expanded(
             child: Column(
@@ -291,7 +297,9 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                                 color: isSelected
                                     ? Colors.white
                                     : Colors.white.withOpacity(0.5),
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -300,7 +308,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                     }).toList(),
                   ),
                 ),
-                
+
                 // Materials Grid
                 Expanded(
                   child: _filteredMaterials.isEmpty
@@ -326,7 +334,8 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                         )
                       : GridView.builder(
                           padding: const EdgeInsets.all(20),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
@@ -349,7 +358,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
       ),
     );
   }
-  
+
   void _openMaterial(Map<String, dynamic> material) {
     final mockDocument = {
       'title': material['title'],
@@ -359,7 +368,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
       'date': material['date'],
       'color': material['color'],
     };
-    
+
     Widget screen;
     if (material['type'] == 'Summary') {
       screen = SummaryScreen(document: mockDocument);
@@ -368,7 +377,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
     } else {
       screen = QuizScreen(document: mockDocument);
     }
-    
+
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 }

@@ -90,7 +90,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
@@ -155,9 +155,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                       color: isSelected
                           ? AppTheme.primaryColor
                           : AppTheme.textSecondary,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
                   );
                 }).toList(),
@@ -282,11 +281,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                 priority == 'High'
                                     ? Icons.keyboard_double_arrow_up_rounded
                                     : priority == 'Medium'
-                                    ? Icons.drag_handle_rounded
-                                    : Icons.keyboard_double_arrow_down_rounded,
-                                color: isSelected
-                                    ? color
-                                    : AppTheme.textSecondary,
+                                        ? Icons.drag_handle_rounded
+                                        : Icons
+                                            .keyboard_double_arrow_down_rounded,
+                                color:
+                                    isSelected ? color : AppTheme.textSecondary,
                               ),
                               const SizedBox(height: 4),
                               Text(

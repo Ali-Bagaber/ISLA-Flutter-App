@@ -11,7 +11,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
@@ -102,15 +102,15 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // GPA Section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Academic Performance', 
+                  'Academic Performance',
                   style: AppTheme.headingSmall.copyWith(
                     color: AppTheme.getTextPrimary(isDark),
                   ),
@@ -119,7 +119,8 @@ class DashboardScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const GPACalculatorScreen()),
+                      MaterialPageRoute(
+                          builder: (_) => const GPACalculatorScreen()),
                     );
                   },
                   child: Text(
@@ -133,7 +134,7 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            
+
             Row(
               children: [
                 Expanded(
@@ -157,18 +158,18 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Study Statistics
             Text(
-              'Study Statistics', 
+              'Study Statistics',
               style: AppTheme.headingSmall.copyWith(
                 color: AppTheme.getTextPrimary(isDark),
               ),
             ),
             const SizedBox(height: 12),
-            
+
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -228,18 +229,18 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Study Time by Subject
             Text(
-              'Study Time by Subject', 
+              'Study Time by Subject',
               style: AppTheme.headingSmall.copyWith(
                 color: AppTheme.getTextPrimary(isDark),
               ),
             ),
             const SizedBox(height: 12),
-            
+
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -283,18 +284,18 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Weekly Activity
             Text(
-              'This Week', 
+              'This Week',
               style: AppTheme.headingSmall.copyWith(
                 color: AppTheme.getTextPrimary(isDark),
               ),
             ),
             const SizedBox(height: 12),
-            
+
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -307,13 +308,23 @@ class DashboardScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _DayActivity(day: 'Mon', hours: 2, isToday: false, isDark: isDark),
-                      _DayActivity(day: 'Tue', hours: 3, isToday: false, isDark: isDark),
-                      _DayActivity(day: 'Wed', hours: 1.5, isToday: false, isDark: isDark),
-                      _DayActivity(day: 'Thu', hours: 4, isToday: true, isDark: isDark),
-                      _DayActivity(day: 'Fri', hours: 0, isToday: false, isDark: isDark),
-                      _DayActivity(day: 'Sat', hours: 0, isToday: false, isDark: isDark),
-                      _DayActivity(day: 'Sun', hours: 0, isToday: false, isDark: isDark),
+                      _DayActivity(
+                          day: 'Mon', hours: 2, isToday: false, isDark: isDark),
+                      _DayActivity(
+                          day: 'Tue', hours: 3, isToday: false, isDark: isDark),
+                      _DayActivity(
+                          day: 'Wed',
+                          hours: 1.5,
+                          isToday: false,
+                          isDark: isDark),
+                      _DayActivity(
+                          day: 'Thu', hours: 4, isToday: true, isDark: isDark),
+                      _DayActivity(
+                          day: 'Fri', hours: 0, isToday: false, isDark: isDark),
+                      _DayActivity(
+                          day: 'Sat', hours: 0, isToday: false, isDark: isDark),
+                      _DayActivity(
+                          day: 'Sun', hours: 0, isToday: false, isDark: isDark),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -354,9 +365,9 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Logout Button
             SizedBox(
               width: double.infinity,
@@ -377,7 +388,7 @@ class DashboardScreen extends StatelessWidget {
                 label: const Text('Logout'),
               ),
             ),
-            
+
             const SizedBox(height: 20),
           ],
         ),
@@ -413,7 +424,9 @@ class _GradeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppTheme.bodySmall.copyWith(color: AppTheme.getTextSecondary(isDark))),
+          Text(title,
+              style: AppTheme.bodySmall
+                  .copyWith(color: AppTheme.getTextSecondary(isDark))),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -499,7 +512,9 @@ class _StatCard extends StatelessWidget {
                 value,
                 style: AppTheme.headingSmall.copyWith(color: color),
               ),
-              Text(label, style: AppTheme.bodySmall.copyWith(color: AppTheme.getTextSecondary(isDark))),
+              Text(label,
+                  style: AppTheme.bodySmall
+                      .copyWith(color: AppTheme.getTextSecondary(isDark))),
             ],
           ),
         ],
@@ -530,7 +545,9 @@ class _SubjectProgressBar extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(subject, style: AppTheme.labelMedium.copyWith(color: AppTheme.getTextPrimary(isDark))),
+            Text(subject,
+                style: AppTheme.labelMedium
+                    .copyWith(color: AppTheme.getTextPrimary(isDark))),
             Text(
               '${hours.toStringAsFixed(0)}h',
               style: AppTheme.bodySmall.copyWith(
@@ -543,7 +560,9 @@ class _SubjectProgressBar extends StatelessWidget {
         const SizedBox(height: 8),
         LinearProgressIndicator(
           value: hours / maxHours,
-          backgroundColor: isDark ? AppTheme.darkCard.withOpacity(0.3) : AppTheme.surfaceColor,
+          backgroundColor: isDark
+              ? AppTheme.darkCard.withOpacity(0.3)
+              : AppTheme.surfaceColor,
           valueColor: AlwaysStoppedAnimation(color),
           borderRadius: BorderRadius.circular(4),
           minHeight: 8,
@@ -570,7 +589,7 @@ class _DayActivity extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxHeight = 60.0;
     final barHeight = hours > 0 ? (hours / 5) * maxHeight : 4.0;
-    
+
     return Column(
       children: [
         SizedBox(
@@ -583,8 +602,12 @@ class _DayActivity extends StatelessWidget {
                 height: barHeight,
                 decoration: BoxDecoration(
                   color: hours > 0
-                      ? (isToday ? AppTheme.primaryColor : AppTheme.primaryLight)
-                      : (isDark ? AppTheme.darkCard.withOpacity(0.3) : AppTheme.surfaceColor),
+                      ? (isToday
+                          ? AppTheme.primaryColor
+                          : AppTheme.primaryLight)
+                      : (isDark
+                          ? AppTheme.darkCard.withOpacity(0.3)
+                          : AppTheme.surfaceColor),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -595,7 +618,9 @@ class _DayActivity extends StatelessWidget {
         Text(
           day,
           style: AppTheme.bodySmall.copyWith(
-            color: isToday ? AppTheme.primaryColor : AppTheme.getTextSecondary(isDark),
+            color: isToday
+                ? AppTheme.primaryColor
+                : AppTheme.getTextSecondary(isDark),
             fontWeight: isToday ? FontWeight.w600 : FontWeight.normal,
           ),
         ),

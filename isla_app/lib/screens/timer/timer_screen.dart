@@ -11,24 +11,25 @@ class TimerScreen extends StatefulWidget {
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStateMixin {
+class _TimerScreenState extends State<TimerScreen>
+    with SingleTickerProviderStateMixin {
   // Timer settings
   int _workDuration = 25; // minutes
   int _breakDuration = 5; // minutes
   int _longBreakDuration = 15; // minutes
   int _sessionsBeforeLongBreak = 4;
-  
+
   // Timer state
   int _currentSeconds = 25 * 60;
   int _completedSessions = 0;
   bool _isRunning = false;
   bool _isBreak = false;
   Timer? _timer;
-  
+
   // Subject selection
   String? _selectedSubject;
   final List<String> _subjects = ['BCS2033', 'BCS3012', 'BCS2042', 'BCS4051'];
-  
+
   late AnimationController _pulseController;
 
   @override
@@ -76,11 +77,11 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
     _timer?.cancel();
     setState(() {
       _isRunning = false;
-      
+
       if (!_isBreak) {
         _completedSessions++;
         _showSessionCompleteDialog();
-        
+
         // Switch to break
         if (_completedSessions % _sessionsBeforeLongBreak == 0) {
           _currentSeconds = _longBreakDuration * 60;
@@ -122,7 +123,8 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
             const SizedBox(height: 8),
             Text(
               'Great job! You completed $_completedSessions session(s) today.',
-              style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+              style:
+                  AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -171,7 +173,7 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
@@ -207,15 +209,16 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                   Text(
                     _isBreak ? 'Break Time' : 'Focus Session',
                     style: AppTheme.labelMedium.copyWith(
-                      color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
+                      color:
+                          _isBreak ? AppTheme.success : AppTheme.primaryColor,
                     ),
                   ),
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 40),
-            
+
             // Timer Circle
             SizedBox(
               width: 280,
@@ -286,9 +289,9 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 40),
-            
+
             // Subject Selection
             if (!_isRunning)
               Container(
@@ -312,13 +315,18 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                           label: Text(subject),
                           selected: isSelected,
                           onSelected: (selected) {
-                            setState(() => _selectedSubject = selected ? subject : null);
+                            setState(() =>
+                                _selectedSubject = selected ? subject : null);
                           },
                           backgroundColor: Colors.white,
                           selectedColor: AppTheme.primaryColor.withOpacity(0.1),
                           labelStyle: TextStyle(
-                            color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            color: isSelected
+                                ? AppTheme.primaryColor
+                                : AppTheme.textSecondary,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                         );
                       }).toList(),
@@ -326,9 +334,9 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                   ],
                 ),
               ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Control Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -340,10 +348,12 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                   color: AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 24),
-                
+
                 // Play/Pause Button
                 _CircleButton(
-                  icon: _isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  icon: _isRunning
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
                   onTap: _isRunning ? _pauseTimer : _startTimer,
                   color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
                   size: 80,
@@ -351,7 +361,7 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                   filled: true,
                 ),
                 const SizedBox(width: 24),
-                
+
                 // Skip Button
                 _CircleButton(
                   icon: Icons.skip_next_rounded,
@@ -363,9 +373,9 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Today's Stats
             Container(
               padding: const EdgeInsets.all(20),
@@ -410,7 +420,8 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                       Expanded(
                         child: _StatItem(
                           icon: Icons.emoji_events_rounded,
-                          value: '${_completedSessions ~/ _sessionsBeforeLongBreak}',
+                          value:
+                              '${_completedSessions ~/ _sessionsBeforeLongBreak}',
                           unit: '',
                           label: 'Cycles',
                         ),
@@ -452,7 +463,6 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
               const SizedBox(height: 20),
               Text('Timer Settings', style: AppTheme.headingSmall),
               const SizedBox(height: 24),
-              
               _SettingSlider(
                 label: 'Focus Duration',
                 value: _workDuration,
@@ -464,7 +474,6 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                 },
               ),
               const SizedBox(height: 20),
-              
               _SettingSlider(
                 label: 'Short Break',
                 value: _breakDuration,
@@ -476,7 +485,6 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                 },
               ),
               const SizedBox(height: 20),
-              
               _SettingSlider(
                 label: 'Long Break',
                 value: _longBreakDuration,
@@ -488,7 +496,6 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
                 },
               ),
               const SizedBox(height: 24),
-              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(

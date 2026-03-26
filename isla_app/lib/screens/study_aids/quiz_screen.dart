@@ -28,12 +28,14 @@ class _QuizScreenState extends State<QuizScreen> {
       'correct': 1,
     },
     {
-      'question': 'What is the time complexity of accessing an element in an array by index?',
+      'question':
+          'What is the time complexity of accessing an element in an array by index?',
       'options': ['O(n)', 'O(log n)', 'O(1)', 'O(n²)'],
       'correct': 2,
     },
     {
-      'question': 'Which data structure is best for implementing a breadth-first search?',
+      'question':
+          'Which data structure is best for implementing a breadth-first search?',
       'options': ['Stack', 'Queue', 'Tree', 'Hash Table'],
       'correct': 1,
     },
@@ -97,7 +99,7 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
@@ -251,7 +253,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   Widget _buildQuizState() {
     final question = _questions[_currentQuestion];
-    
+
     return Column(
       children: [
         // Progress
@@ -264,7 +266,7 @@ class _QuizScreenState extends State<QuizScreen> {
             borderRadius: BorderRadius.circular(4),
           ),
         ),
-        
+
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -307,9 +309,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Options
                 ...List.generate(
                   question['options'].length,
@@ -326,7 +328,7 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
         ),
-        
+
         // Next Button
         if (_answered)
           Padding(
@@ -359,7 +361,7 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget _buildResultState() {
     final percentage = (_score / _questions.length * 100).toInt();
     final passed = percentage >= 60;
-    
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -369,7 +371,8 @@ class _QuizScreenState extends State<QuizScreen> {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: (passed ? AppTheme.success : AppTheme.error).withOpacity(0.1),
+              color:
+                  (passed ? AppTheme.success : AppTheme.error).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -505,7 +508,9 @@ class _OptionCard extends StatelessWidget {
 
   Color get _backgroundColor {
     if (!showResult) {
-      return isSelected ? AppTheme.primaryColor.withOpacity(0.05) : Colors.white;
+      return isSelected
+          ? AppTheme.primaryColor.withOpacity(0.05)
+          : Colors.white;
     }
     if (isCorrect) return AppTheme.success.withOpacity(0.1);
     if (isSelected && !isCorrect) return AppTheme.error.withOpacity(0.1);
@@ -515,7 +520,7 @@ class _OptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ['A', 'B', 'C', 'D'];
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -547,16 +552,17 @@ class _OptionCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: showResult && (isCorrect || (isSelected && !isCorrect))
-                        ? Icon(
-                            isCorrect ? Icons.check : Icons.close,
-                            color: Colors.white,
-                            size: 20,
-                          )
-                        : Text(
-                            labels[index],
-                            style: AppTheme.labelMedium,
-                          ),
+                    child:
+                        showResult && (isCorrect || (isSelected && !isCorrect))
+                            ? Icon(
+                                isCorrect ? Icons.check : Icons.close,
+                                color: Colors.white,
+                                size: 20,
+                              )
+                            : Text(
+                                labels[index],
+                                style: AppTheme.labelMedium,
+                              ),
                   ),
                 ),
                 const SizedBox(width: 16),

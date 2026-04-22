@@ -19,6 +19,40 @@ dependencies:
 
   # State management
   provider: ^6.1.1
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # Local persistence
+  drift: ^2.21.0
+  sqlite3_flutter_libs: ^0.5.26
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Notifications
+  flutter_local_notifications: ^17.2.4
+
+  # File import
+  file_picker: ^8.1.2
+
+  # Networking
+  dio: ^5.7.0
+  http: ^1.2.0
+
+  # Local key-value store
+  hive_flutter: ^1.1.0
+
+  # UI motion and charts
+  flutter_animate: ^4.5.0
+  fl_chart: ^0.68.0
+
+  # Firebase
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.6.12
+  firebase_storage: ^12.4.5
+  google_sign_in: ^6.3.0
 
   # Date & Calendar
   table_calendar: ^3.0.9
@@ -32,6 +66,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  drift_dev: ^2.21.2
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true

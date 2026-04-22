@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../services/gemini_study_service.dart';
 
 class QuizScreen extends StatefulWidget {
   final Map<String, dynamic> document;
+  final List<Map<String, dynamic>>? savedQuestions;
 
-  const QuizScreen({super.key, required this.document});
+  const QuizScreen({super.key, required this.document, this.savedQuestions});
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -14,51 +16,77 @@ class QuizScreen extends StatefulWidget {
 
 class _QuizScreenState extends State<QuizScreen> {
   bool _isGenerating = true;
+  String? _error;
   bool _quizStarted = false;
   bool _quizCompleted = false;
   int _currentQuestion = 0;
   int _score = 0;
   int? _selectedAnswer;
   bool _answered = false;
-
-  final List<Map<String, dynamic>> _questions = [
-    {
-      'question': 'Which data structure follows LIFO principle?',
-      'options': ['Queue', 'Stack', 'Array', 'Linked List'],
-      'correct': 1,
-    },
-    {
-      'question':
-          'What is the time complexity of accessing an element in an array by index?',
-      'options': ['O(n)', 'O(log n)', 'O(1)', 'O(n²)'],
-      'correct': 2,
-    },
-    {
-      'question':
-          'Which data structure is best for implementing a breadth-first search?',
-      'options': ['Stack', 'Queue', 'Tree', 'Hash Table'],
-      'correct': 1,
-    },
-    {
-      'question': 'What is the worst-case time complexity of Quick Sort?',
-      'options': ['O(n)', 'O(n log n)', 'O(n²)', 'O(log n)'],
-      'correct': 2,
-    },
-    {
-      'question': 'Which data structure uses key-value pairs for storage?',
-      'options': ['Array', 'Stack', 'Hash Table', 'Queue'],
-      'correct': 2,
-    },
-  ];
+  List<Map<String, dynamic>> _questions = [];
+  String _loadingMessage = 'AI is creating your quiz';
+  final _service = GeminiStudyService();
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() => _isGenerating = false);
-      }
+    if (widget.savedQuestions != null && widget.savedQuestions!.isNotEmpty) {
+      _questions = widget.savedQuestions!;
+      _isGenerating = false;
+    } else {
+      _generateQuiz();
+    }
+  }
+
+  Future<void> _generateQuiz() async {
+    setState(() {
+      _isGenerating = true;
+      _error = null;
+      _currentQuestion = 0;
+      _score = 0;
+      _answered = false;
+      _selectedAnswer = null;
+      _quizCompleted = false;
+      _quizStarted = false;
+      _loadingMessage = 'AI is creating your quiz';
     });
+    try {
+      final qs = await _service.generateQuiz(
+        title: widget.document['title'] ?? 'Unknown Document',
+        subject: widget.document['subject'] ?? 'General',
+        count: 5,
+        onRetrying: () {
+          if (mounted) {
+            setState(() => _loadingMessage =
+                'AI is busy — retrying automatically, please wait...');
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _questions = qs.isNotEmpty
+              ? qs
+              : [
+                  {
+                    'question': 'Could not generate questions',
+                    'options': ['Try again'],
+                    'correct': 0
+                  }
+                ];
+          _isGenerating = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e
+              .toString()
+              .replaceAll('StateError: ', '')
+              .replaceAll('Bad state: ', '');
+          _isGenerating = false;
+        });
+      }
+    }
   }
 
   void _selectAnswer(int index) {
@@ -82,6 +110,23 @@ class _QuizScreenState extends State<QuizScreen> {
       });
     } else {
       setState(() => _quizCompleted = true);
+      _saveResult();
+    }
+  }
+
+  Future<void> _saveResult() async {
+    try {
+      await GeminiStudyService.saveQuizWithResult(
+        title: widget.document['title'] ?? '',
+        subject: widget.document['subject'] ?? '',
+        questions: _questions,
+        score: _score,
+        total: _questions.length,
+        documentId:
+            widget.document['id'] ?? widget.document['documentId'] ?? '',
+      );
+    } catch (_) {
+      // Silently fail if Firebase not configured
     }
   }
 
@@ -103,6 +148,8 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(
+        backgroundColor: AppTheme.getBackgroundColor(isDark),
+        surfaceTintColor: Colors.transparent,
         title: const Text('Quiz'),
         actions: [
           if (_quizStarted && !_quizCompleted)
@@ -119,13 +166,18 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
         ],
       ),
-      body: _isGenerating
-          ? _buildLoadingState()
-          : _quizCompleted
-              ? _buildResultState()
-              : _quizStarted
-                  ? _buildQuizState()
-                  : _buildStartState(),
+      body: Container(
+        decoration: AppTheme.getBackgroundDecoration(isDark),
+        child: _isGenerating
+            ? _buildLoadingState()
+            : _error != null
+                ? _buildErrorState()
+                : _quizCompleted
+                    ? _buildResultState()
+                    : _quizStarted
+                        ? _buildQuizState()
+                        : _buildStartState(),
+      ),
     );
   }
 
@@ -138,7 +190,7 @@ class _QuizScreenState extends State<QuizScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppTheme.warning.withOpacity(0.1),
+              color: AppTheme.warning.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -148,18 +200,38 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text(
-            'Generating Quiz...',
-            style: AppTheme.headingSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Creating questions from your document',
-            style: AppTheme.bodyMedium.copyWith(
-              color: AppTheme.textSecondary,
-            ),
-          ),
+          Text('Generating Quiz...', style: AppTheme.headingSmall),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _error ?? 'An error occurred',
+              style: AppTheme.bodyMedium.copyWith(color: AppTheme.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _generateQuiz,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

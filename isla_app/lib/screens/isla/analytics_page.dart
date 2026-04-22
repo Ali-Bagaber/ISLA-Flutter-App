@@ -1,0 +1,955 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../core/theme/app_colors.dart';
+import '../../widgets/isla_scaffold_background.dart';
+
+class AnalyticsPage extends StatelessWidget {
+  const AnalyticsPage({super.key});
+
+  static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+  static FirebaseFirestore? get _db =>
+      Firebase.apps.isEmpty ? null : FirebaseFirestore.instance;
+
+  static Stream<List<Map<String, dynamic>>> _coursesStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value([]);
+    return db
+        .collection('courses')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((s) => s.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+  }
+
+  static double _computeGpa(List<Map<String, dynamic>> courses) {
+    // Grade → GPA point mapping (4.0 scale)
+    const gradePoints = {
+      'A+': 4.0,
+      'A': 4.0,
+      'A-': 3.7,
+      'B+': 3.3,
+      'B': 3.0,
+      'B-': 2.7,
+      'C+': 2.3,
+      'C': 2.0,
+      'C-': 1.7,
+      'D+': 1.3,
+      'D': 1.0,
+      'F': 0.0,
+    };
+    double totalPoints = 0;
+    int totalCredits = 0;
+    for (final c in courses) {
+      final grade = ((c['grade'] ?? '') as String).trim().toUpperCase();
+      final credits = (c['credits'] as num? ?? 3).toInt();
+      final points = gradePoints[grade];
+      if (points != null && credits > 0) {
+        totalPoints += points * credits;
+        totalCredits += credits;
+      }
+    }
+    if (totalCredits == 0) return 0.0;
+    return double.parse((totalPoints / totalCredits).toStringAsFixed(2));
+  }
+
+  static Stream<Map<String, dynamic>> _analyticsStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value({});
+    return db
+        .collection('analytics')
+        .doc(uid)
+        .snapshots()
+        .map((s) => s.exists ? s.data()! : <String, dynamic>{});
+  }
+
+  static Stream<Map<String, dynamic>> _profileStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value({});
+    return db
+        .collection('profiles')
+        .doc(uid)
+        .snapshots()
+        .map((s) => s.exists ? s.data()! : <String, dynamic>{});
+  }
+
+  static Stream<int> _completedTasksStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value(0);
+    return db
+        .collection('tasks')
+        .where('userId', isEqualTo: uid)
+        .where('completed', isEqualTo: true)
+        .snapshots()
+        .map((s) => s.docs.length);
+  }
+
+  static Stream<Map<String, int>> _subjectMinutesStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value({});
+    return db
+        .collection('sessions')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      final map = <String, int>{};
+      for (final doc in snap.docs) {
+        final subject = (doc.data()['subject'] ?? 'Other').toString();
+        final mins = (doc.data()['focusMinutes'] as num? ?? 0).toInt();
+        map[subject] = (map[subject] ?? 0) + mins;
+      }
+      return map;
+    });
+  }
+
+  String _formatMinutes(int mins) {
+    if (mins >= 60) return '${(mins / 60).toStringAsFixed(1)}h';
+    return '${mins}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: IslaColors.background,
+      body: IslaScaffoldBackground(
+        child: StreamBuilder<Map<String, dynamic>>(
+          stream: _analyticsStream(),
+          builder: (context, analyticsSnap) {
+            final analytics = analyticsSnap.data ?? {};
+            final totalMins =
+                (analytics['totalStudyTime'] as num? ?? 0).toInt();
+            final sessionCount =
+                (analytics['sessionCount'] as num? ?? 0).toInt();
+            final quizAvg = (analytics['quizAvg'] as num? ?? 0).toInt();
+            final gpa = (analytics['currentGPA'] as num? ?? 0.0).toDouble();
+
+            return StreamBuilder<int>(
+              stream: _completedTasksStream(),
+              builder: (context, tasksSnap) {
+                final tasksDone = tasksSnap.data ?? 0;
+
+                return StreamBuilder<Map<String, dynamic>>(
+                  stream: _profileStream(),
+                  builder: (context, profileSnap) {
+                    final profile = profileSnap.data ?? {};
+                    final name = (profile['name'] ??
+                            profile['displayName'] ??
+                            FirebaseAuth.instance.currentUser?.displayName ??
+                            'Student')
+                        .toString();
+
+                    return StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _coursesStream(),
+                      builder: (context, coursesSnap) {
+                        final courses = coursesSnap.data ?? [];
+                        final liveGpa = _computeGpa(courses);
+                        final displayGpa = liveGpa > 0 ? liveGpa : gpa;
+
+                        return StreamBuilder<Map<String, int>>(
+                          stream: _subjectMinutesStream(),
+                          builder: (context, subjectSnap) {
+                            final subjectMap = subjectSnap.data ?? {};
+                            final topSubjects = subjectMap.entries.toList()
+                              ..sort((a, b) => b.value.compareTo(a.value));
+                            final maxMins = topSubjects.isEmpty
+                                ? 1
+                                : topSubjects.first.value.clamp(1, 99999);
+
+                            return SingleChildScrollView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Center(
+                                    child: Text(
+                                      'Analytics',
+                                      style: GoogleFonts.manrope(
+                                        color: IslaColors.onSurface,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 52,
+                                        letterSpacing: -1.8,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Center(
+                                    child: Text(
+                                      'INSIGHTS & PROGRESS',
+                                      style: GoogleFonts.manrope(
+                                        color: IslaColors.onSurfaceVariant,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 11,
+                                        letterSpacing: 3.2,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Profile banner
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: IslaColors.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                          color: IslaColors.outlineVariant),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 54,
+                                          height: 54,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: IslaColors.cyanToBlue,
+                                          ),
+                                          child: const Icon(Icons.person,
+                                              color: IslaColors
+                                                  .onPrimaryContainer),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: GoogleFonts.manrope(
+                                                  color: IslaColors.onSurface,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 18,
+                                                ),
+                                              ),
+                                              Text(
+                                                sessionCount > 0
+                                                    ? '$sessionCount study sessions completed'
+                                                    : 'Start a focus session to track progress',
+                                                style: GoogleFonts.inter(
+                                                  color: IslaColors
+                                                      .onSurfaceVariant,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Stats grid
+                                  GridView.count(
+                                    crossAxisCount: 2,
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    mainAxisSpacing: 10,
+                                    crossAxisSpacing: 10,
+                                    childAspectRatio: 1.8,
+                                    children: [
+                                      _StatTile(
+                                        icon: Icons.timer_outlined,
+                                        label: 'Focus',
+                                        value: _formatMinutes(totalMins),
+                                      ),
+                                      _StatTile(
+                                        icon: Icons.task_alt_rounded,
+                                        label: 'Done',
+                                        value: '$tasksDone',
+                                      ),
+                                      _StatTile(
+                                        icon: Icons.school_rounded,
+                                        label: 'GPA',
+                                        value: displayGpa > 0
+                                            ? displayGpa.toStringAsFixed(2)
+                                            : '\u2014',
+                                      ),
+                                      _StatTile(
+                                        icon: Icons.quiz_outlined,
+                                        label: 'Quiz Avg',
+                                        value: quizAvg > 0
+                                            ? '$quizAvg%'
+                                            : '\u2014',
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  // Subject study time breakdown
+                                  if (topSubjects.isNotEmpty) ...[
+                                    Text(
+                                      'Study Time by Subject',
+                                      style: GoogleFonts.manrope(
+                                        color: IslaColors.onSurface,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 17,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: IslaColors.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        children: topSubjects
+                                            .take(5)
+                                            .map(
+                                              (e) => Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 10),
+                                                child: _SubjectRow(
+                                                  subject: e.key,
+                                                  progress: e.value / maxMins,
+                                                  label:
+                                                      _formatMinutes(e.value),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: IslaColors.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          'Complete focus sessions to see subject breakdown',
+                                          style: GoogleFonts.inter(
+                                              color:
+                                                  IslaColors.onSurfaceVariant,
+                                              fontSize: 13),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 14),
+                                  // ── Marks section ──────────────────────────
+                                  const _MarksSection(),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _StatTile(
+      {required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: IslaColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: IslaColors.primary),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.manrope(
+                  color: IslaColors.onSurface,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: IslaColors.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectRow extends StatelessWidget {
+  final String subject;
+  final double progress;
+  final String label;
+
+  const _SubjectRow(
+      {required this.subject, required this.progress, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              subject,
+              style: GoogleFonts.inter(
+                color: IslaColors.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: IslaColors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: IslaColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            backgroundColor: IslaColors.surfaceContainerHighest,
+            valueColor: const AlwaysStoppedAnimation(IslaColors.primary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Marks Section ─────────────────────────────────────────────────────────
+
+class _MarksSection extends StatelessWidget {
+  const _MarksSection();
+
+  static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+  static FirebaseFirestore? get _db =>
+      Firebase.apps.isEmpty ? null : FirebaseFirestore.instance;
+
+  static Stream<List<Map<String, dynamic>>> _coursesStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value([]);
+    return db
+        .collection('courses')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((s) => s.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+  }
+
+  static Stream<List<Map<String, dynamic>>> _marksStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value([]);
+    return db
+        .collection('marks')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((s) {
+      final marks = s.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      marks.sort((a, b) {
+        final aTs = a['createdAt'];
+        final bTs = b['createdAt'];
+        if (aTs == null && bTs == null) return 0;
+        if (aTs == null) return 1;
+        if (bTs == null) return -1;
+        return (bTs as dynamic).compareTo(aTs as dynamic);
+      });
+      return marks;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _coursesStream(),
+      builder: (context, coursesSnap) {
+        final courses = coursesSnap.data ?? [];
+        final courseNames = courses
+            .map((c) => (c['name'] as String? ?? '').trim())
+            .where((n) => n.isNotEmpty)
+            .toList();
+
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _marksStream(),
+          builder: (context, snap) {
+            final marks = snap.data ?? [];
+
+            // Build subject set: all courses + any extra subjects already in marks
+            final Map<String, List<Map<String, dynamic>>> grouped = {};
+            // Seed with all known courses (empty list)
+            for (final name in courseNames) {
+              grouped.putIfAbsent(name, () => []);
+            }
+            // Add actual marks
+            for (final m in marks) {
+              final sub = (m['subject'] as String? ?? 'Other').trim();
+              grouped.putIfAbsent(sub, () => []).add(m);
+            }
+            final subjects = grouped.keys.toList()..sort();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Marks',
+                      style: GoogleFonts.manrope(
+                        color: IslaColors.onSurface,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () =>
+                          _showAddMarkDialog(context, courseNames: courseNames),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add Mark'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: IslaColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (subjects.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: IslaColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'No courses yet.\nAdd courses first, then track your marks here.',
+                        style: GoogleFonts.inter(
+                          color: IslaColors.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                else
+                  ...subjects.map((sub) => _SubjectMarksCard(
+                        subject: sub,
+                        marks: grouped[sub]!,
+                        onAddMark: () => _showAddMarkDialog(context,
+                            subject: sub, courseNames: courseNames),
+                        onDeleteMark: (id) =>
+                            _db?.collection('marks').doc(id).delete(),
+                      )),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static Future<void> _showAddMarkDialog(
+    BuildContext context, {
+    String? subject,
+    List<String> courseNames = const [],
+  }) async {
+    String selectedSubject =
+        subject ?? (courseNames.isNotEmpty ? courseNames.first : '');
+    final customSubjectCtrl = TextEditingController(
+        text: courseNames.contains(selectedSubject) ? '' : selectedSubject);
+    bool useCustomSubject =
+        !courseNames.contains(selectedSubject) && courseNames.isNotEmpty
+            ? false
+            : courseNames.isEmpty;
+    final nameCtrl = TextEditingController();
+    final scoreCtrl = TextEditingController();
+    final maxCtrl = TextEditingController(text: '100');
+    String selectedType = 'Quiz';
+
+    const types = [
+      'Quiz',
+      'Assignment',
+      'Lab',
+      'Midterm',
+      'Final',
+      'Project',
+      'Other',
+    ];
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Add Mark'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Subject — dropdown if courses exist, else text field
+                if (courseNames.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    value: courseNames.contains(selectedSubject)
+                        ? selectedSubject
+                        : courseNames.first,
+                    decoration: const InputDecoration(labelText: 'Course'),
+                    items: courseNames
+                        .map((n) => DropdownMenuItem(value: n, child: Text(n)))
+                        .toList(),
+                    onChanged: (v) =>
+                        setDialogState(() => selectedSubject = v ?? ''),
+                  )
+                else
+                  TextField(
+                    controller: customSubjectCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject / Course',
+                      hintText: 'e.g. Web Engineering',
+                    ),
+                    onChanged: (v) => selectedSubject = v.trim(),
+                  ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: types
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedType = v ?? 'Quiz'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Name',
+                    hintText: '$selectedType 1',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: scoreCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(labelText: 'Score'),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('/', style: TextStyle(fontSize: 20)),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: maxCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(labelText: 'Out of'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final sub = courseNames.isNotEmpty
+                    ? selectedSubject
+                    : customSubjectCtrl.text.trim();
+                final name = nameCtrl.text.trim();
+                final score = double.tryParse(scoreCtrl.text.trim());
+                final max = double.tryParse(maxCtrl.text.trim());
+                if (sub.isEmpty ||
+                    name.isEmpty ||
+                    score == null ||
+                    max == null ||
+                    max <= 0) {
+                  return;
+                }
+                final db = _db;
+                final uid = _uid;
+                if (db == null || uid == null) return;
+                final ref = db.collection('marks').doc();
+                await ref.set({
+                  'markId': ref.id,
+                  'userId': uid,
+                  'subject': sub,
+                  'name': name,
+                  'type': selectedType,
+                  'score': score,
+                  'maxScore': max,
+                  'percentage': (score / max * 100).roundToDouble(),
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: IslaColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    customSubjectCtrl.dispose();
+    nameCtrl.dispose();
+    scoreCtrl.dispose();
+    maxCtrl.dispose();
+  }
+}
+
+// ─── Subject Marks Card ─────────────────────────────────────────────────────
+
+class _SubjectMarksCard extends StatelessWidget {
+  final String subject;
+  final List<Map<String, dynamic>> marks;
+  final VoidCallback onAddMark;
+  final void Function(String id) onDeleteMark;
+
+  const _SubjectMarksCard({
+    required this.subject,
+    required this.marks,
+    required this.onAddMark,
+    required this.onDeleteMark,
+  });
+
+  double get _average {
+    if (marks.isEmpty) return 0;
+    final sum =
+        marks.fold<double>(0, (a, m) => a + ((m['percentage'] as num?) ?? 0));
+    return sum / marks.length;
+  }
+
+  Color get _gradeColor {
+    final avg = _average;
+    if (avg >= 80) return const Color(0xFF10B981);
+    if (avg >= 60) return const Color(0xFFF59E0B);
+    return const Color(0xFFEF4444);
+  }
+
+  String get _grade {
+    final avg = _average;
+    if (avg >= 90) return 'A+';
+    if (avg >= 85) return 'A';
+    if (avg >= 80) return 'A-';
+    if (avg >= 75) return 'B+';
+    if (avg >= 70) return 'B';
+    if (avg >= 65) return 'B-';
+    if (avg >= 60) return 'C+';
+    if (avg >= 55) return 'C';
+    if (avg >= 50) return 'C-';
+    if (avg >= 45) return 'D';
+    return 'F';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: IslaColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _gradeColor.withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subject,
+                        style: GoogleFonts.manrope(
+                          color: IslaColors.onSurface,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Text(
+                        '${marks.length} entr${marks.length == 1 ? 'y' : 'ies'}',
+                        style: GoogleFonts.inter(
+                          color: IslaColors.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (marks.isNotEmpty) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _gradeColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$_grade  ${_average.toStringAsFixed(1)}%',
+                      style: GoogleFonts.manrope(
+                        color: _gradeColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                IconButton(
+                  icon: Icon(Icons.add_circle_outline_rounded,
+                      color: IslaColors.primary, size: 22),
+                  tooltip: 'Add mark',
+                  onPressed: onAddMark,
+                ),
+              ],
+            ),
+          ),
+          // Marks list
+          if (marks.isNotEmpty) ...[
+            Divider(
+              height: 1,
+              color: _gradeColor.withOpacity(0.15),
+              indent: 14,
+              endIndent: 14,
+            ),
+            ...marks.map((m) {
+              final pct = (m['percentage'] as num? ?? 0).toDouble();
+              final score = (m['score'] as num? ?? 0).toDouble();
+              final maxScore = (m['maxScore'] as num? ?? 100).toDouble();
+              final color = pct >= 80
+                  ? const Color(0xFF10B981)
+                  : pct >= 60
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFFEF4444);
+              return ListTile(
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                leading: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    m['type'] as String? ?? '',
+                    style: GoogleFonts.inter(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  m['name'] as String? ?? '',
+                  style: GoogleFonts.inter(
+                    color: IslaColors.onSurface,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${score % 1 == 0 ? score.toInt() : score} / ${maxScore % 1 == 0 ? maxScore.toInt() : maxScore}',
+                      style: GoogleFonts.manrope(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert,
+                          size: 16, color: IslaColors.onSurfaceVariant),
+                      onSelected: (v) {
+                        if (v == 'delete') {
+                          onDeleteMark(m['id'] as String);
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(children: [
+                            Icon(Icons.delete_rounded,
+                                size: 16, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}

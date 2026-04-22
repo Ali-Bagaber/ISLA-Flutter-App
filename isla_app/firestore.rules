@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner() {
+      return resource.data.userId == request.auth.uid;
+    }
+    function isWritingOwn() {
+      return request.resource.data.userId == request.auth.uid;
+    }
+
+    // ── User-keyed documents (doc ID == uid) ────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+    match /user_settings/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+    match /profiles/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // ── Analytics (doc id is userId OR userId_date) ─────────────────────────
+    match /analytics/{docId} {
+      allow read:   if isAuth() && (resource.data.userId == request.auth.uid
+                                    || docId == request.auth.uid);
+      allow create: if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+
+    // ── Per-user collections with userId field ──────────────────────────────
+    match /documents/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /courses/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /marks/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /tasks/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /sessions/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /study_materials/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /study_aids/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /summaries/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /flashcards/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /quiz_aids/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /quiz_results/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /quizzes/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /study_goals/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /checklist_templates/{docId} {
+      allow read:           if isAuth() && isOwner();
+      allow create:         if isAuth() && isWritingOwn();
+      allow update, delete: if isAuth() && isOwner();
+    }
+    match /gpa_records/{docId} {
+      allow read, write: if isAuth() && request.auth.uid == docId;
+    }
+  }
+}

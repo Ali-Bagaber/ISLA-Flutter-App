@@ -1,96 +1,113 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart' as provider_pkg;
+import 'config/firebase_runtime_config.dart';
+import 'screens/auth/auth_gate.dart';
+import 'screens/isla/analytics_page.dart';
+import 'screens/isla/focus_timer_page.dart';
+import 'screens/isla/home_page.dart';
+import 'screens/isla/tasks_page.dart';
+import 'screens/onboarding/finalize_setup_page.dart';
+import 'screens/onboarding/select_intention_page.dart';
+import 'screens/onboarding/splash_page.dart';
+import 'screens/onboarding/value_proposition_page.dart';
+import 'core/theme/app_theme.dart';
 import 'theme/theme_provider.dart';
-import 'theme/app_theme.dart';
-import 'screens/auth/login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (FirebaseRuntimeConfig.isConfigured) {
+    await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
+  }
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: const IslaApp(),
+    ProviderScope(
+      child: provider_pkg.ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: const IslaApp(),
+      ),
     ),
   );
 }
+
+final GoRouter _router = GoRouter(
+  initialLocation: '/splash',
+  routes: [
+    GoRoute(
+      path: '/splash',
+      name: 'splash',
+      builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: '/onboard',
+      name: 'onboard',
+      builder: (context, state) => const ValuePropositionPage(),
+    ),
+    GoRoute(
+      path: '/onboard/value',
+      name: 'valueProposition',
+      builder: (context, state) => const ValuePropositionPage(),
+    ),
+    GoRoute(
+      path: '/onboard/intention',
+      name: 'intention',
+      builder: (context, state) => const SelectIntentionPage(),
+    ),
+    GoRoute(
+      path: '/onboard/finalize',
+      name: 'onboardFinalize',
+      builder: (context, state) => const FinalizeSetupPage(),
+    ),
+    GoRoute(
+      path: '/setup/finalize',
+      name: 'finalizeSetup',
+      builder: (context, state) => const FinalizeSetupPage(),
+    ),
+    GoRoute(
+      path: '/home',
+      name: 'home',
+      builder: (context, state) => const HomePage(),
+    ),
+    GoRoute(
+      path: '/session/focus',
+      name: 'focus',
+      builder: (context, state) => const FocusTimerPage(),
+    ),
+    GoRoute(
+      path: '/tasks',
+      name: 'tasks',
+      builder: (context, state) => const TasksPage(),
+    ),
+    GoRoute(
+      path: '/analytics',
+      name: 'analytics',
+      builder: (context, state) => const AnalyticsPage(),
+    ),
+    GoRoute(
+      path: '/app',
+      name: 'app',
+      builder: (context, state) => const AuthGate(),
+    ),
+  ],
+);
 
 class IslaApp extends StatelessWidget {
   const IslaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        final isDark = themeProvider.isDarkMode;
+    final isDark = provider_pkg.Provider.of<ThemeProvider>(context).isDarkMode;
 
-        return MaterialApp(
-          title: 'ISLA - Study Assistant',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            useMaterial3: true,
-            brightness: isDark ? Brightness.dark : Brightness.light,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppTheme.primaryColor,
-              brightness: isDark ? Brightness.dark : Brightness.light,
-            ),
-            scaffoldBackgroundColor: AppTheme.getBackgroundColor(isDark),
-            textTheme: GoogleFonts.poppinsTextTheme().apply(
-              bodyColor: AppTheme.getTextPrimary(isDark),
-              displayColor: AppTheme.getTextPrimary(isDark),
-            ),
-            appBarTheme: AppBarTheme(
-              centerTitle: true,
-              elevation: 0,
-              backgroundColor: AppTheme.getBackgroundColor(isDark),
-              foregroundColor: AppTheme.getTextPrimary(isDark),
-              titleTextStyle: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.getTextPrimary(isDark),
-              ),
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                elevation: 0,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            inputDecorationTheme: InputDecorationTheme(
-              filled: true,
-              fillColor: AppTheme.getSurfaceColor(isDark),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    const BorderSide(color: AppTheme.primaryColor, width: 2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-            cardTheme: CardThemeData(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              color: AppTheme.getCardColor(isDark),
-            ),
-          ),
-          home: const LoginScreen(),
-        );
-      },
+    return MaterialApp.router(
+      title: 'ISLA - Study Assistant',
+      debugShowCheckedModeBanner: false,
+      theme: IslaTheme.light,
+      darkTheme: IslaTheme.dark,
+      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+      routerConfig: _router,
     );
   }
 }

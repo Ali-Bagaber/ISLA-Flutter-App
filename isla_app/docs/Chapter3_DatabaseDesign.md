@@ -876,6 +876,313 @@ User Action → Flutter Widget → FirestoreService → Cloud Firestore → UI U
 
 ---
 
+## 3.5.8 Enhanced Database Specification (Detailed Version)
+
+To address evaluation feedback that the database appears too basic, this section extends the core schema with:
+
+- richer operational fields (status, quality, timestamps, ownership)
+- learning analytics fields (streaks, completion rate, focus quality)
+- governance fields (audit, soft-delete, versioning)
+- additional entities for goals, reminders, settings, and activity logging
+
+The original eight core tables are retained, but each is expanded with implementation-level attributes.
+
+### A. Enhanced Core Tables (Revised Tables 3.17 - 3.24)
+
+#### Table 3.17 User (Enhanced)
+
+| Attribute       | Data Type | Key | Description                                    |
+| --------------- | --------- | --- | ---------------------------------------------- |
+| userId          | String    | PK  | Unique identifier for each user (Firebase UID) |
+| name            | String    | -   | Student full name                              |
+| email           | String    | -   | Student email address                          |
+| studentId       | String    | -   | University student ID                          |
+| faculty         | String    | -   | Faculty or school                              |
+| program         | String    | -   | Program or degree name                         |
+| year            | Integer   | -   | Current academic year                          |
+| semester        | Integer   | -   | Current semester                               |
+| profileImageUrl | String    | -   | Profile image URL                              |
+| accountStatus   | String    | -   | active, suspended, archived                    |
+| createdAt       | DateTime  | -   | Account creation timestamp                     |
+| updatedAt       | DateTime  | -   | Last profile update timestamp                  |
+| lastLoginAt     | DateTime  | -   | Last successful login timestamp                |
+
+#### Table 3.18 Document (Enhanced)
+
+| Attribute        | Data Type | Key | Description                         |
+| ---------------- | --------- | --- | ----------------------------------- |
+| documentId       | String    | PK  | Unique document identifier          |
+| userId           | String    | FK  | References User.userId              |
+| title            | String    | -   | Document title                      |
+| subject          | String    | -   | Course code                         |
+| fileType         | String    | -   | PDF, PPTX, DOCX                     |
+| fileUrl          | String    | -   | Storage download URL                |
+| storagePath      | String    | -   | Internal cloud storage path         |
+| fileSizeBytes    | Integer   | -   | File size in bytes                  |
+| checksum         | String    | -   | Duplicate detection hash            |
+| uploadDate       | DateTime  | -   | Date uploaded                       |
+| lastViewedAt     | DateTime  | -   | Last access timestamp               |
+| processingStatus | String    | -   | pending, processing, ready, failed  |
+| extractedTextRef | String    | -   | Reference to extracted text payload |
+| isArchived       | Boolean   | -   | Soft archive flag                   |
+
+#### Table 3.19 Study Aid (Enhanced)
+
+| Attribute       | Data Type | Key | Description                    |
+| --------------- | --------- | --- | ------------------------------ |
+| studyAidId      | String    | PK  | Unique study aid identifier    |
+| documentId      | String    | FK  | References Document.documentId |
+| userId          | String    | FK  | References User.userId         |
+| type            | String    | -   | Summary, Flashcard, Quiz       |
+| content         | Text/JSON | -   | Generated study content        |
+| generatedDate   | DateTime  | -   | Date generated                 |
+| generationModel | String    | -   | Model or algorithm identifier  |
+| sourceVersion   | Integer   | -   | Source document version        |
+| difficultyLevel | String    | -   | easy, medium, hard             |
+| qualityScore    | Float     | -   | Quality rating (0.0 to 1.0)    |
+| isFavorited     | Boolean   | -   | Saved by user for quick access |
+| status          | String    | -   | active, deprecated, deleted    |
+
+#### Table 3.20 Quiz Result (Enhanced)
+
+| Attribute        | Data Type | Key | Description                       |
+| ---------------- | --------- | --- | --------------------------------- |
+| resultId         | String    | PK  | Unique quiz attempt ID            |
+| studyAidId       | String    | FK  | References StudyAid.studyAidId    |
+| userId           | String    | FK  | References User.userId            |
+| score            | Integer   | -   | Quiz score percentage             |
+| totalQuestions   | Integer   | -   | Total question count              |
+| correctAnswers   | Integer   | -   | Number of correct answers         |
+| wrongAnswers     | Integer   | -   | Number of wrong answers           |
+| unansweredCount  | Integer   | -   | Unanswered question count         |
+| attemptDate      | DateTime  | -   | Attempt date                      |
+| timeSpentSeconds | Integer   | -   | Time spent in seconds             |
+| attemptNo        | Integer   | -   | User attempt number for this quiz |
+| feedbackSummary  | String    | -   | Generated feedback text           |
+
+#### Table 3.21 Task (Enhanced)
+
+| Attribute        | Data Type | Key | Description                                |
+| ---------------- | --------- | --- | ------------------------------------------ |
+| taskId           | String    | PK  | Unique task identifier                     |
+| userId           | String    | FK  | References User.userId                     |
+| title            | String    | -   | Task title                                 |
+| subject          | String    | -   | Course code or category                    |
+| taskType         | String    | -   | assignment, revision, quiz, exam           |
+| description      | Text      | -   | Task details                               |
+| dueDate          | DateTime  | -   | Task deadline                              |
+| priority         | String    | -   | low, medium, high                          |
+| status           | String    | -   | notStarted, inProgress, completed, overdue |
+| estimatedMinutes | Integer   | -   | Planned effort in minutes                  |
+| reminderAt       | DateTime  | -   | Reminder datetime                          |
+| completed        | Boolean   | -   | Completed or not                           |
+| completedAt      | DateTime  | -   | Task completion timestamp                  |
+| createdAt        | DateTime  | -   | Task creation timestamp                    |
+| updatedAt        | DateTime  | -   | Last update timestamp                      |
+
+#### Table 3.22 Study Session (Enhanced)
+
+| Attribute          | Data Type | Key | Description                               |
+| ------------------ | --------- | --- | ----------------------------------------- |
+| sessionId          | String    | PK  | Unique session ID                         |
+| userId             | String    | FK  | References User.userId                    |
+| subject            | String    | -   | Subject studied                           |
+| documentId         | String    | FK  | Optional reference to Document.documentId |
+| sessionMode        | String    | -   | focus, pomodoro, deepWork, review         |
+| startTime          | DateTime  | -   | Session start timestamp                   |
+| endTime            | DateTime  | -   | Session end timestamp                     |
+| plannedMinutes     | Integer   | -   | Planned study time                        |
+| actualMinutes      | Integer   | -   | Actual study time                         |
+| breakMinutes       | Integer   | -   | Total break time                          |
+| interruptionsCount | Integer   | -   | Number of interruptions                   |
+| checklistDone      | Integer   | -   | Completed checklist items                 |
+| checklistTotal     | Integer   | -   | Total checklist items                     |
+| focusScore         | Integer   | -   | Computed session focus score              |
+| completed          | Boolean   | -   | Session finished successfully             |
+| createdAt          | DateTime  | -   | Record creation timestamp                 |
+
+#### Table 3.23 Course (Enhanced)
+
+| Attribute    | Data Type | Key | Description                       |
+| ------------ | --------- | --- | --------------------------------- |
+| courseId     | String    | PK  | Unique course ID                  |
+| userId       | String    | FK  | References User.userId            |
+| courseCode   | String    | -   | Course code                       |
+| courseName   | String    | -   | Course title                      |
+| credits      | Integer   | -   | Credit hours                      |
+| grade        | String    | -   | Grade obtained                    |
+| gradePoint   | Float     | -   | Numeric value for GPA calculation |
+| semester     | Integer   | -   | Semester number                   |
+| year         | Integer   | -   | Academic year                     |
+| lecturerName | String    | -   | Lecturer or instructor name       |
+| createdAt    | DateTime  | -   | Creation timestamp                |
+| updatedAt    | DateTime  | -   | Update timestamp                  |
+
+#### Table 3.24 Analytics (Enhanced)
+
+| Attribute           | Data Type | Key | Description                      |
+| ------------------- | --------- | --- | -------------------------------- |
+| analyticsId         | String    | PK  | Unique analytics record          |
+| userId              | String    | FK  | References User.userId           |
+| periodType          | String    | -   | daily, weekly, monthly, semester |
+| periodStart         | DateTime  | -   | Period start date                |
+| periodEnd           | DateTime  | -   | Period end date                  |
+| totalStudyTime      | Integer   | -   | Total study time in minutes      |
+| sessionsCount       | Integer   | -   | Number of sessions               |
+| documentsCount      | Integer   | -   | Uploaded documents count         |
+| completedTasksCount | Integer   | -   | Completed tasks count            |
+| completionRate      | Float     | -   | Percentage of completed tasks    |
+| averageFocusScore   | Float     | -   | Mean session focus score         |
+| strongestSubject    | String    | -   | Subject with best performance    |
+| weakestSubject      | String    | -   | Subject needing improvement      |
+| currentGPA          | Float     | -   | Current GPA                      |
+| currentCGPA         | Float     | -   | Current CGPA                     |
+| generatedAt         | DateTime  | -   | Snapshot generation timestamp    |
+
+### B. Additional Supporting Tables (New)
+
+#### Table 3.25 User Settings
+
+| Attribute        | Data Type | Key | Description                     |
+| ---------------- | --------- | --- | ------------------------------- |
+| settingId        | String    | PK  | Unique settings record          |
+| userId           | String    | FK  | References User.userId          |
+| themeMode        | String    | -   | light, dark, system             |
+| language         | String    | -   | Preferred app language          |
+| reminderEnabled  | Boolean   | -   | Global reminders toggle         |
+| dailyGoalMinutes | Integer   | -   | User target daily study minutes |
+| weekStartDay     | Integer   | -   | First day of week (1-7)         |
+| updatedAt        | DateTime  | -   | Last settings update            |
+
+#### Table 3.26 Study Goal
+
+| Attribute     | Data Type | Key | Description                     |
+| ------------- | --------- | --- | ------------------------------- |
+| goalId        | String    | PK  | Unique goal identifier          |
+| userId        | String    | FK  | References User.userId          |
+| title         | String    | -   | Goal title                      |
+| description   | Text      | -   | Goal details                    |
+| targetType    | String    | -   | minutes, sessions, tasks, score |
+| targetValue   | Integer   | -   | Goal target value               |
+| progressValue | Integer   | -   | Current progress                |
+| startDate     | DateTime  | -   | Goal start date                 |
+| endDate       | DateTime  | -   | Goal end date                   |
+| status        | String    | -   | active, achieved, expired       |
+
+#### Table 3.27 Notification Log
+
+| Attribute         | Data Type | Key | Description                   |
+| ----------------- | --------- | --- | ----------------------------- |
+| notificationId    | String    | PK  | Unique notification ID        |
+| userId            | String    | FK  | References User.userId        |
+| channel           | String    | -   | inApp, push, email            |
+| title             | String    | -   | Notification title            |
+| body              | String    | -   | Notification body             |
+| type              | String    | -   | reminder, milestone, warning  |
+| relatedEntityType | String    | -   | task, session, quiz, document |
+| relatedEntityId   | String    | -   | Linked record identifier      |
+| isRead            | Boolean   | -   | Read status                   |
+| sentAt            | DateTime  | -   | Sent timestamp                |
+| readAt            | DateTime  | -   | Read timestamp                |
+
+#### Table 3.28 Session Checklist Template
+
+| Attribute  | Data Type | Key | Description            |
+| ---------- | --------- | --- | ---------------------- |
+| templateId | String    | PK  | Checklist template ID  |
+| userId     | String    | FK  | References User.userId |
+| subject    | String    | -   | Subject scope          |
+| title      | String    | -   | Template name          |
+| isDefault  | Boolean   | -   | Default template flag  |
+| createdAt  | DateTime  | -   | Creation timestamp     |
+| updatedAt  | DateTime  | -   | Last update timestamp  |
+
+#### Table 3.29 Session Checklist Item
+
+| Attribute   | Data Type | Key | Description                                    |
+| ----------- | --------- | --- | ---------------------------------------------- |
+| itemId      | String    | PK  | Checklist item ID                              |
+| templateId  | String    | FK  | References SessionChecklistTemplate.templateId |
+| sessionId   | String    | FK  | Optional link to StudySession.sessionId        |
+| itemText    | String    | -   | Checklist statement                            |
+| itemOrder   | Integer   | -   | Display order                                  |
+| isCompleted | Boolean   | -   | Completion status                              |
+| completedAt | DateTime  | -   | Completion timestamp                           |
+
+#### Table 3.30 Document Tag
+
+| Attribute | Data Type | Key | Description                    |
+| --------- | --------- | --- | ------------------------------ |
+| tagId     | String    | PK  | Tag identifier                 |
+| userId    | String    | FK  | References User.userId         |
+| tagName   | String    | -   | Tag text (example: final exam) |
+| colorHex  | String    | -   | Visual color code              |
+| createdAt | DateTime  | -   | Tag creation timestamp         |
+
+#### Table 3.31 Document Tag Map
+
+| Attribute  | Data Type | Key | Description                    |
+| ---------- | --------- | --- | ------------------------------ |
+| mapId      | String    | PK  | Mapping record ID              |
+| documentId | String    | FK  | References Document.documentId |
+| tagId      | String    | FK  | References DocumentTag.tagId   |
+| createdAt  | DateTime  | -   | Mapping creation timestamp     |
+
+#### Table 3.32 Activity Log
+
+| Attribute  | Data Type | Key | Description                                     |
+| ---------- | --------- | --- | ----------------------------------------------- |
+| logId      | String    | PK  | Activity record identifier                      |
+| userId     | String    | FK  | References User.userId                          |
+| action     | String    | -   | createTask, uploadDocument, finishSession, etc. |
+| entityType | String    | -   | task, document, session, studyAid               |
+| entityId   | String    | -   | Related entity identifier                       |
+| metadata   | Map       | -   | Additional context payload                      |
+| createdAt  | DateTime  | -   | Action timestamp                                |
+
+### C. Enhanced Relationship Summary
+
+- User 1:N Document, Task, StudySession, Course, Analytics, StudyGoal, NotificationLog, ActivityLog
+- Document 1:N StudyAid
+- Document N:N DocumentTag via DocumentTagMap
+- StudyAid 1:N QuizResult
+- StudySession 1:N SessionChecklistItem
+- SessionChecklistTemplate 1:N SessionChecklistItem
+
+### D. Firestore Collection Mapping (Implementation)
+
+Suggested physical collections:
+
+- users
+- documents
+- study_aids
+- quiz_results
+- tasks
+- sessions
+- courses
+- analytics
+- user_settings
+- study_goals
+- notifications
+- checklist_templates
+- checklist_items
+- document_tags
+- document_tag_map
+- activity_logs
+
+### E. Recommended Composite Indexes for Expanded Schema
+
+1. tasks: userId ASC, status ASC, dueDate ASC
+2. tasks: userId ASC, priority DESC, createdAt DESC
+3. sessions: userId ASC, startTime DESC
+4. sessions: userId ASC, subject ASC, startTime DESC
+5. analytics: userId ASC, periodType ASC, periodEnd DESC
+6. study_aids: userId ASC, type ASC, generatedDate DESC
+7. notifications: userId ASC, isRead ASC, sentAt DESC
+8. activity_logs: userId ASC, createdAt DESC
+
+---
+
 ## Conclusion
 
 The ISLA database design uses Firebase Cloud Firestore to provide:

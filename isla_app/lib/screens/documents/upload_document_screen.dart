@@ -1,10 +1,17 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../services/document_service.dart';
 
 class UploadDocumentScreen extends StatefulWidget {
-  const UploadDocumentScreen({super.key});
+  /// When launched from a course section, pre-fill the subject dropdown.
+  final String? preselectedSubject;
+
+  const UploadDocumentScreen({super.key, this.preselectedSubject});
 
   @override
   State<UploadDocumentScreen> createState() => _UploadDocumentScreenState();
@@ -12,29 +19,95 @@ class UploadDocumentScreen extends StatefulWidget {
 
 class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
   String? _selectedSubject;
-  String? _selectedFile;
+  String? _selectedFileName;
+  Uint8List? _selectedFileBytes;
   final _titleController = TextEditingController();
 
-  final List<String> _subjects = [
-    'BCS2033',
-    'BCS3012',
-    'BCS2042',
-    'BCS4051',
-    'Add New Subject',
-  ];
+  // Courses loaded from Firestore — populated in initState
+  List<String> _courseNames = [];
 
-  void _pickFile() {
-    // Simulate file picking
-    setState(() {
-      _selectedFile = 'lecture_notes_chapter5.pdf';
+  bool _isSaving = false;
+  double _uploadProgress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSubject = widget.preselectedSubject;
+    // Subscribe to courses stream once
+    DocumentService.watchCourses().listen((courses) {
+      if (!mounted) return;
+      final names =
+          courses.map((c) => (c['name'] as String? ?? '').trim()).toList();
+      setState(() {
+        _courseNames = names;
+        // If preselected subject is not in list yet, keep it selectable
+        if (_selectedSubject != null &&
+            !_courseNames.contains(_selectedSubject)) {
+          _courseNames.add(_selectedSubject!);
+        }
+      });
     });
   }
 
-  void _uploadDocument() {
-    if (_titleController.text.isNotEmpty &&
-        _selectedSubject != null &&
-        _selectedFile != null) {
-      // Show success message
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'pptx', 'ppt', 'docx', 'doc'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.bytes == null) return;
+
+    setState(() {
+      _selectedFileName = file.name;
+      _selectedFileBytes = file.bytes;
+      // Pre-fill title with file name (without extension)
+      if (_titleController.text.isEmpty) {
+        final nameWithoutExt = file.name.contains('.')
+            ? file.name.substring(0, file.name.lastIndexOf('.'))
+            : file.name;
+        _titleController.text = nameWithoutExt;
+      }
+    });
+  }
+
+  Future<void> _uploadDocument() async {
+    if (_isSaving) return;
+    if (_titleController.text.trim().isEmpty ||
+        _selectedSubject == null ||
+        _selectedFileName == null ||
+        _selectedFileBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all fields and pick a file'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _uploadProgress = 0;
+    });
+
+    try {
+      await DocumentService.uploadAndSaveDocument(
+        title: _titleController.text.trim(),
+        subject: _selectedSubject!,
+        fileName: _selectedFileName!,
+        fileBytes: _selectedFileBytes!,
+        onProgress: (p) => setState(() => _uploadProgress = p),
+      );
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Document uploaded successfully!'),
@@ -42,273 +115,284 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
         ),
       );
       Navigator.pop(context);
-    } else {
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all required fields'),
+        SnackBar(
+          content: Text('Upload failed: $e'),
           backgroundColor: AppTheme.error,
         ),
       );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(title: const Text('Upload Document')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Upload Area
-            InkWell(
-              onTap: _pickFile,
-              borderRadius: AppTheme.borderRadiusLarge,
-              child: Container(
-                width: double.infinity,
-                height: 200,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: AppTheme.borderRadiusLarge,
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withOpacity(0.3),
-                    width: 2,
-                    style: BorderStyle.solid,
+      body: Container(
+        decoration: AppTheme.getBackgroundDecoration(isDark),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── File Picker Area ──────────────────────────────────────────
+              InkWell(
+                onTap: _isSaving ? null : _pickFile,
+                borderRadius: AppTheme.borderRadiusLarge,
+                child: Container(
+                  width: double.infinity,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: AppTheme.getCardColor(isDark),
+                    borderRadius: AppTheme.borderRadiusLarge,
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
                   ),
-                ),
-                child: _selectedFile == null
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
-                              shape: BoxShape.circle,
+                  child: _selectedFileName == null
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor
+                                    .withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.cloud_upload_rounded,
+                                color: AppTheme.primaryColor,
+                                size: 30,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.cloud_upload_rounded,
+                            const SizedBox(height: 12),
+                            Text(
+                              'Tap to pick a file',
+                              style: AppTheme.labelMedium.copyWith(
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'PDF, PPTX, DOCX supported',
+                              style: AppTheme.bodySmall,
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.insert_drive_file_rounded,
                               color: AppTheme.primaryColor,
-                              size: 32,
+                              size: 44,
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Tap to upload document',
-                            style: AppTheme.labelMedium.copyWith(
-                              color: AppTheme.primaryColor,
+                            const SizedBox(height: 10),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                _selectedFileName!,
+                                style: AppTheme.labelMedium,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Supports PDF, PPTX, DOCX',
-                            style: AppTheme.bodySmall,
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            color: AppTheme.success,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(_selectedFile!, style: AppTheme.labelMedium),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () {
-                              setState(() => _selectedFile = null);
-                            },
-                            child: const Text('Change file'),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // Document Title
-            Text('Document Title', style: AppTheme.labelMedium),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                hintText: 'Enter document title',
-                prefixIcon: Icon(Icons.title_rounded),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Subject Selection
-            Text('Select Subject', style: AppTheme.labelMedium),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedSubject,
-              decoration: const InputDecoration(
-                hintText: 'Choose a subject',
-                prefixIcon: Icon(Icons.folder_outlined),
-              ),
-              items: _subjects.map((subject) {
-                return DropdownMenuItem(value: subject, child: Text(subject));
-              }).toList(),
-              onChanged: (value) {
-                if (value == 'Add New Subject') {
-                  _showAddSubjectDialog();
-                } else {
-                  setState(() => _selectedSubject = value);
-                }
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            // Tags (Optional)
-            Text('Tags (Optional)', style: AppTheme.labelMedium),
-            const SizedBox(height: 8),
-            TextFormField(
-              decoration: const InputDecoration(
-                hintText: 'e.g., lecture, chapter5, midterm',
-                prefixIcon: Icon(Icons.tag_rounded),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // AI Processing Options
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.05),
-                borderRadius: AppTheme.borderRadiusMedium,
-                border: Border.all(
-                  color: AppTheme.primaryColor.withOpacity(0.2),
+                            if (_selectedFileBytes != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatSize(_selectedFileBytes!.length),
+                                style: AppTheme.bodySmall,
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: _isSaving ? null : _pickFile,
+                              child: const Text('Change file'),
+                            ),
+                          ],
+                        ),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome_rounded,
-                        color: AppTheme.primaryColor,
+
+              const SizedBox(height: 24),
+
+              // ── Document Title ────────────────────────────────────────────
+              Text('Document Title', style: AppTheme.labelMedium),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _titleController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(
+                  hintText: 'Enter document title',
+                  prefixIcon: Icon(Icons.title_rounded),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Course / Subject Selection ────────────────────────────────
+              Text('Select Course', style: AppTheme.labelMedium),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: (_courseNames.contains(_selectedSubject) ||
+                        _selectedSubject == null)
+                    ? _selectedSubject
+                    : null,
+                decoration: const InputDecoration(
+                  hintText: 'Choose a course',
+                  prefixIcon: Icon(Icons.folder_outlined),
+                ),
+                items: [
+                  ..._courseNames.map(
+                    (s) => DropdownMenuItem(value: s, child: Text(s)),
+                  ),
+                  const DropdownMenuItem(
+                    value: '__new__',
+                    child: Row(children: [
+                      Icon(Icons.add_rounded,
+                          size: 18, color: AppTheme.primaryColor),
+                      SizedBox(width: 6),
+                      Text('Create new course',
+                          style: TextStyle(color: AppTheme.primaryColor)),
+                    ]),
+                  ),
+                ],
+                onChanged: _isSaving
+                    ? null
+                    : (value) {
+                        if (value == '__new__') {
+                          _showCreateCourseDialog();
+                        } else {
+                          setState(() => _selectedSubject = value);
+                        }
+                      },
+              ),
+
+              const SizedBox(height: 32),
+
+              // ── Upload progress ───────────────────────────────────────────
+              if (_isSaving) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: _uploadProgress > 0 ? _uploadProgress : null,
+                        backgroundColor:
+                            AppTheme.primaryColor.withValues(alpha: 0.15),
+                        valueColor: const AlwaysStoppedAnimation(
+                          AppTheme.primaryColor,
+                        ),
+                        minHeight: 6,
+                        borderRadius: BorderRadius.circular(99),
                       ),
-                      const SizedBox(width: 8),
+                    ),
+                    if (_uploadProgress > 0) ...[
+                      const SizedBox(width: 10),
                       Text(
-                        'AI Processing',
+                        '${(_uploadProgress * 100).round()}%',
                         style: AppTheme.labelMedium.copyWith(
                           color: AppTheme.primaryColor,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  const _AIOptionCheckbox(
-                    title: 'Auto-generate summary',
-                    subtitle: 'Create summary after upload',
-                  ),
-                  const _AIOptionCheckbox(
-                    title: 'Generate flashcards',
-                    subtitle: 'Create flashcards automatically',
-                  ),
-                  const _AIOptionCheckbox(
-                    title: 'Generate quiz',
-                    subtitle: 'Create quiz questions',
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // Upload Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _uploadDocument,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  ],
                 ),
-                child: const Text(
-                  'Upload Document',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Upload Button ─────────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _uploadDocument,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Upload Document',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _showAddSubjectDialog() {
+  Future<void> _showCreateCourseDialog() async {
     final controller = TextEditingController();
-    showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Subject'),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Create New Course'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter subject code'),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Course name',
+            hintText: 'e.g. BCS2033 or Data Structures',
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                setState(() {
-                  _subjects.insert(_subjects.length - 1, controller.text);
-                  _selectedSubject = controller.text;
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Create'),
           ),
         ],
       ),
     );
+    if (confirmed == true && controller.text.trim().isNotEmpty) {
+      final name = controller.text.trim();
+      await DocumentService.createCourse(name);
+      if (mounted) setState(() => _selectedSubject = name);
+    }
+    controller.dispose();
   }
-}
 
-class _AIOptionCheckbox extends StatefulWidget {
-  final String title;
-  final String subtitle;
-
-  const _AIOptionCheckbox({required this.title, required this.subtitle});
-
-  @override
-  State<_AIOptionCheckbox> createState() => _AIOptionCheckboxState();
-}
-
-class _AIOptionCheckboxState extends State<_AIOptionCheckbox> {
-  bool _isChecked = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return CheckboxListTile(
-      value: _isChecked,
-      onChanged: (value) => setState(() => _isChecked = value ?? false),
-      title: Text(widget.title, style: AppTheme.bodyMedium),
-      subtitle: Text(widget.subtitle, style: AppTheme.bodySmall),
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      activeColor: AppTheme.primaryColor,
-      controlAffinity: ListTileControlAffinity.leading,
-    );
+  String _formatSize(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '$bytes B';
   }
 }

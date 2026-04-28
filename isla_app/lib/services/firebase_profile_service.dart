@@ -64,7 +64,7 @@ class FirebaseProfileService {
         .ref()
         .child('profile_photos')
         .child(docId)
-        .child('photo.jpg');
+        .child('photo_${DateTime.now().millisecondsSinceEpoch}.jpg');
     await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
     return await ref.getDownloadURL();
   }

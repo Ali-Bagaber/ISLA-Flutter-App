@@ -123,12 +123,21 @@ class _IslaProfileAvatarState extends State<IslaProfileAvatar> {
     final iconColor = AppTheme.getTextSecondary(isDark);
     final hasPhoto = _photoUrl != null && _photoUrl!.isNotEmpty;
 
-    final avatar = CircleAvatar(
-      radius: widget.radius,
-      backgroundColor: bg,
-      backgroundImage: hasPhoto ? NetworkImage(_photoUrl!) : null,
+    final size = widget.radius * 2;
+    final avatar = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+      clipBehavior: Clip.antiAlias,
       child: hasPhoto
-          ? null
+          ? Image.network(
+              _photoUrl!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  Icon(Icons.person, size: widget.radius, color: iconColor),
+            )
           : Icon(Icons.person, size: widget.radius, color: iconColor),
     );
 

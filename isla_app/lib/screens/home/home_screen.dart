@@ -261,67 +261,52 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  children: const [
-                    IslaLogo(),
-                    Spacer(),
-                    IslaProfileAvatar(),
+                  children: [
+                    const IslaLogo(),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(
+                        isDark
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
+                        color: AppTheme.getTextPrimary(isDark),
+                      ),
+                      onPressed: () => themeProvider.toggleTheme(),
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppTheme.getCardColor(isDark),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const IslaProfileAvatar(),
                   ],
                 ),
 
                 const SizedBox(height: 16),
 
-                // Header with Live Clock
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _currentTime,
-                          style: AppTheme.headingLarge.copyWith(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.getTextPrimary(isDark),
-                          ),
+                // Page title — matching Tasks page style
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        _greeting,
+                        style: AppTheme.headingLarge.copyWith(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.getTextPrimary(isDark),
+                          letterSpacing: -1.2,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$_greeting, Student!',
-                          style: AppTheme.bodyLarge.copyWith(
-                            color: AppTheme.getTextSecondary(isDark),
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'YOUR STUDY HUB',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.getTextSecondary(isDark),
+                          letterSpacing: 3.2,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            isDark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            color: AppTheme.getTextPrimary(isDark),
-                          ),
-                          onPressed: () => themeProvider.toggleTheme(),
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppTheme.getCardColor(isDark),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: Icon(
-                            Icons.notifications_outlined,
-                            color: AppTheme.getTextPrimary(isDark),
-                          ),
-                          onPressed: () {},
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppTheme.getCardColor(isDark),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 24),

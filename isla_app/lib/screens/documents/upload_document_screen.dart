@@ -26,6 +26,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
   // Courses loaded from Firestore — populated in initState
   List<String> _courseNames = [];
 
+  final _descriptionController = TextEditingController();
   bool _isSaving = false;
   double _uploadProgress = 0;
 
@@ -52,6 +53,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
   @override
   void dispose() {
     _titleController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
@@ -104,6 +106,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
         subject: _selectedSubject!,
         fileName: _selectedFileName!,
         fileBytes: _selectedFileBytes!,
+        description: _descriptionController.text.trim(),
         onProgress: (p) => setState(() => _uploadProgress = p),
       );
 
@@ -278,6 +281,25 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                           setState(() => _selectedSubject = value);
                         }
                       },
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Description (for AI checklist context) ───────────────────
+              Text('What is this document about? (optional)', style: AppTheme.labelMedium),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _descriptionController,
+                enabled: !_isSaving,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. Chapter 3 covers recursion, trees, and sorting algorithms',
+                  prefixIcon: Padding(
+                    padding: EdgeInsets.only(bottom: 40),
+                    child: Icon(Icons.notes_rounded),
+                  ),
+                  alignLabelWithHint: true,
+                ),
               ),
 
               const SizedBox(height: 32),

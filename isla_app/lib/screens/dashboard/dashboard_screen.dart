@@ -136,13 +136,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           }
 
-          ImageProvider? previewImage() {
-            if (pickedBytes != null) return MemoryImage(pickedBytes!);
-            if (profile.photoUrl.isNotEmpty)
-              return NetworkImage(profile.photoUrl);
-            return null;
-          }
-
           return AlertDialog(
             title: const Text('Edit Profile'),
             content: SingleChildScrollView(
@@ -155,15 +148,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Stack(
                       alignment: Alignment.bottomRight,
                       children: [
-                        CircleAvatar(
-                          radius: 44,
-                          backgroundColor:
-                              AppTheme.primaryColor.withValues(alpha: 0.15),
-                          backgroundImage: previewImage(),
-                          child: previewImage() == null
-                              ? const Icon(Icons.person,
-                                  size: 44, color: AppTheme.primaryColor)
-                              : null,
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: pickedBytes != null
+                              ? Image.memory(pickedBytes!, width: 88, height: 88, fit: BoxFit.cover)
+                              : profile.photoUrl.isNotEmpty
+                                  ? Image.network(
+                                      profile.photoUrl,
+                                      width: 88,
+                                      height: 88,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.person,
+                                        size: 44,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    )
+                                  : const Icon(Icons.person, size: 44, color: AppTheme.primaryColor),
                         ),
                         Container(
                           padding: const EdgeInsets.all(5),
@@ -221,9 +228,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         try {
                           String photoUrl = profile.photoUrl;
                           if (pickedBytes != null) {
-                            photoUrl = await _profileService
-                                    .uploadProfilePhoto(pickedBytes!) ??
-                                profile.photoUrl;
+                            final uploaded = await _profileService
+                                .uploadProfilePhoto(pickedBytes!);
+                            if (uploaded == null) {
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Photo upload failed. Check your connection and try again.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                              setDialogState(() => isSaving = false);
+                              return;
+                            }
+                            photoUrl = uploaded;
                           }
                           final updated = profile.copyWith(
                             name: nameController.text.trim(),
@@ -237,7 +257,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             photoUrl: photoUrl,
                           );
                           await _profileService.saveProfile(updated);
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Profile updated successfully'),
+                                  backgroundColor: Colors.green),
+                            );
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Error saving profile: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         } finally {
                           if (ctx.mounted) {
                             setDialogState(() => isSaving = false);
@@ -394,20 +430,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 35,
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.2),
-                            backgroundImage: profile.photoUrl.isNotEmpty
-                                ? NetworkImage(profile.photoUrl)
-                                : null,
-                            child: profile.photoUrl.isEmpty
-                                ? const Icon(
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: profile.photoUrl.isNotEmpty
+                                ? Image.network(
+                                    profile.photoUrl,
+                                    width: 70,
+                                    height: 70,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(
                                     Icons.person,
                                     size: 40,
                                     color: Colors.white,
-                                  )
-                                : null,
+                                  ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -1036,7 +1083,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         preselectedSubject ?? (courseNames.isNotEmpty ? courseNames.first : '');
     final nameCtrl = TextEditingController();
     final scoreCtrl = TextEditingController();
-    final maxCtrl = TextEditingController(text: '100');
     final weightCtrl = TextEditingController();
     String selectedType = 'Quiz';
 
@@ -1113,6 +1159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   controller: weightCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => set(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Worth (out of 100 total)',
                     hintText: 'e.g. 20 means this is 20% of your grade',
@@ -1128,34 +1175,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Score / Max
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: scoreCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration:
-                            const InputDecoration(labelText: 'Your Score'),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text('/',
-                          style: TextStyle(
-                              fontSize: 22, fontWeight: FontWeight.w700)),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: maxCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(labelText: 'Out of'),
-                      ),
-                    ),
-                  ],
+                // Score out of worth
+                TextField(
+                  controller: scoreCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText:
+                        'Your Score (out of ${weightCtrl.text.isEmpty ? '?' : weightCtrl.text})',
+                    hintText: 'How many marks you got',
+                  ),
                 ),
               ],
             ),
@@ -1169,19 +1198,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () async {
                 final rawName = nameCtrl.text.trim();
                 final score = double.tryParse(scoreCtrl.text.trim());
-                final max = double.tryParse(maxCtrl.text.trim());
                 final weight = double.tryParse(weightCtrl.text.trim()) ?? 0;
-                if (selectedSubject.isEmpty ||
-                    score == null ||
-                    max == null ||
-                    max <= 0) return;
+                if (selectedSubject.isEmpty || score == null || weight <= 0)
+                  return;
                 final name = rawName.isEmpty ? selectedType : rawName;
                 await DocumentService.addMark(
                   subject: selectedSubject,
                   name: name,
                   type: selectedType,
                   score: score,
-                  maxScore: max,
+                  maxScore: weight,
                   weight: weight,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
@@ -1198,7 +1224,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     nameCtrl.dispose();
     scoreCtrl.dispose();
-    maxCtrl.dispose();
     weightCtrl.dispose();
   }
 }

@@ -68,6 +68,7 @@ class DocumentService {
     required String subject,
     required String fileName,
     required Uint8List fileBytes,
+    String description = '',
     void Function(double progress)? onProgress,
   }) async {
     final storage = _storage;
@@ -121,6 +122,7 @@ class DocumentService {
       'storagePath': storagePath,
       'processingStatus': 'ready',
       'isArchived': false,
+      'notes': description,
       'userId': userId,
       'uploadDate': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
@@ -136,6 +138,7 @@ class DocumentService {
     required String subject,
     required String type,
     required String size,
+    String description = '',
   }) async {
     final col = _col;
     final userId = _userId;
@@ -153,6 +156,7 @@ class DocumentService {
       'storagePath': '',
       'processingStatus': 'ready',
       'isArchived': false,
+      'notes': description,
       'userId': userId,
       'uploadDate': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),

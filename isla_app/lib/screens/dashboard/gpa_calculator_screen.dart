@@ -52,8 +52,9 @@ class GPACalculatorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.getBackgroundColor(isDark),
       appBar: AppBar(title: const Text('GPA Calculator')),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: DocumentService.watchCourses(),
@@ -181,6 +182,7 @@ class GPACalculatorScreen extends StatelessWidget {
                             grade: validGrade,
                             grades: _grades,
                             gradePoints: _gradePoints,
+                            isDark: isDark,
                             onGradeChanged: (g) =>
                                 DocumentService.updateCourse(docId, grade: g),
                             onCreditsChanged: (cr) =>
@@ -259,6 +261,7 @@ class _CourseCard extends StatelessWidget {
   final String grade;
   final List<String> grades;
   final Map<String, double> gradePoints;
+  final bool isDark;
   final ValueChanged<String> onGradeChanged;
   final ValueChanged<int> onCreditsChanged;
   final VoidCallback onDelete;
@@ -269,6 +272,7 @@ class _CourseCard extends StatelessWidget {
     required this.grade,
     required this.grades,
     required this.gradePoints,
+    required this.isDark,
     required this.onGradeChanged,
     required this.onCreditsChanged,
     required this.onDelete,
@@ -288,9 +292,11 @@ class _CourseCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.getCardColor(isDark),
         borderRadius: AppTheme.borderRadiusMedium,
-        boxShadow: AppTheme.cardShadow,
+        border: Border.all(
+          color: AppTheme.getTextSecondary(isDark).withValues(alpha: 0.12),
+        ),
       ),
       child: Row(
         children: [
@@ -299,7 +305,9 @@ class _CourseCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppTheme.labelMedium),
+                Text(name,
+                    style: AppTheme.labelMedium.copyWith(
+                        color: AppTheme.getTextPrimary(isDark))),
                 const SizedBox(height: 6),
                 // Credit selector: 1 2 3 4
                 Row(
@@ -317,7 +325,7 @@ class _CourseCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: sel
                                 ? AppTheme.primaryColor
-                                : AppTheme.surfaceColor,
+                                : AppTheme.getSurfaceColor(isDark),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           alignment: Alignment.center,
@@ -326,8 +334,9 @@ class _CourseCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color:
-                                  sel ? Colors.white : AppTheme.textSecondary,
+                              color: sel
+                                  ? Colors.white
+                                  : AppTheme.getTextSecondary(isDark),
                             ),
                           ),
                         ),
@@ -337,8 +346,9 @@ class _CourseCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text('credits',
-                    style: AppTheme.bodySmall
-                        .copyWith(color: AppTheme.textLight, fontSize: 10)),
+                    style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.getTextSecondary(isDark),
+                        fontSize: 10)),
               ],
             ),
           ),
@@ -347,14 +357,15 @@ class _CourseCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _gradeColor.withOpacity(0.1),
+              color: _gradeColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _gradeColor.withOpacity(0.3)),
+              border: Border.all(color: _gradeColor.withValues(alpha: 0.3)),
             ),
             child: DropdownButton<String>(
               value: grade,
               underline: const SizedBox(),
               isDense: true,
+              dropdownColor: isDark ? const Color(0xFF1E2227) : Colors.white,
               style: TextStyle(
                   color: _gradeColor,
                   fontWeight: FontWeight.w700,
@@ -372,7 +383,7 @@ class _CourseCard extends StatelessWidget {
           IconButton(
             onPressed: onDelete,
             icon: const Icon(Icons.close, size: 20),
-            color: AppTheme.textLight,
+            color: AppTheme.getTextSecondary(isDark),
           ),
         ],
       ),

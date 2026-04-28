@@ -20,6 +20,6 @@ call flutter pub get
 echo.
 echo Starting ISLA App...
 echo.
-call flutter run
+call flutter run --web-renderer html
 
 pause

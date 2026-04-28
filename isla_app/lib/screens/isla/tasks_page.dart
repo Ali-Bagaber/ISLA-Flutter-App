@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/auth_service.dart';
 import '../../services/task_service.dart';
 import '../../theme/theme_provider.dart';
 import '../planner/add_task_screen.dart';
@@ -240,13 +241,32 @@ class _TasksPageState extends State<TasksPage> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: palette.surfaceHigh,
-                        child: Icon(
-                          Icons.person,
-                          color: palette.primary,
-                          size: 20,
+                      PopupMenuButton<String>(
+                        onSelected: (v) async {
+                          if (v == 'logout') {
+                            await AuthService.signOut();
+                            if (context.mounted) context.goNamed('splash');
+                          }
+                        },
+                        itemBuilder: (ctx) => [
+                          PopupMenuItem(
+                            value: 'logout',
+                            child: Row(children: [
+                              Icon(Icons.logout_rounded,
+                                  color: palette.onSurfaceMute, size: 18),
+                              const SizedBox(width: 8),
+                              const Text('Sign Out'),
+                            ]),
+                          ),
+                        ],
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: palette.surfaceHigh,
+                          child: Icon(
+                            Icons.person,
+                            color: palette.primary,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ],

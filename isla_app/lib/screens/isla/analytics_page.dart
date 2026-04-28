@@ -2,9 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
-import '../../widgets/isla_scaffold_background.dart';
+import '../../services/auth_service.dart';
+import '../../theme/theme_provider.dart';
 
 class AnalyticsPage extends StatelessWidget {
   const AnalyticsPage({super.key});
@@ -115,10 +118,96 @@ class AnalyticsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0C0E0F) : const Color(0xFFF4FBFE);
+    final appBarBg = isDark ? const Color(0xEE0C0E0F) : const Color(0xF8FFFFFF);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final onSurfaceMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final outlineSoft = isDark
+        ? IslaColors.outlineVariant.withValues(alpha: 0.4)
+        : const Color(0xFFD4DEE4);
+    final surfaceHigh = isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
+
     return Scaffold(
-      backgroundColor: IslaColors.background,
-      body: IslaScaffoldBackground(
-        child: StreamBuilder<Map<String, dynamic>>(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Standard AppBar (matches Tasks page) ──────────────────────
+            Container(
+              height: 64,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: appBarBg,
+                border: Border(bottom: BorderSide(color: outlineSoft)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => context.goNamed('home'),
+                    icon: Icon(Icons.menu_rounded, color: onSurfaceMute),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'ISLA',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                        color: primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () =>
+                            context.read<ThemeProvider>().setDarkMode(!isDark),
+                        icon: Icon(
+                          isDark
+                              ? Icons.light_mode_rounded
+                              : Icons.dark_mode_rounded,
+                          color: onSurfaceMute,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      PopupMenuButton<String>(
+                        onSelected: (v) async {
+                          if (v == 'logout') {
+                            await AuthService.signOut();
+                            if (context.mounted) context.goNamed('splash');
+                          }
+                        },
+                        itemBuilder: (ctx) => [
+                          PopupMenuItem(
+                            value: 'logout',
+                            child: Row(children: [
+                              Icon(Icons.logout_rounded,
+                                  color: onSurfaceMute, size: 18),
+                              const SizedBox(width: 8),
+                              const Text('Sign Out'),
+                            ]),
+                          ),
+                        ],
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: surfaceHigh,
+                          child:
+                              Icon(Icons.person, color: primary, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // ── Content ───────────────────────────────────────────────────
+            Expanded(
+              child: StreamBuilder<Map<String, dynamic>>(
           stream: _analyticsStream(),
           builder: (context, analyticsSnap) {
             final analytics = analyticsSnap.data ?? {};
@@ -171,7 +260,7 @@ class AnalyticsPage extends StatelessWidget {
                                     child: Text(
                                       'Analytics',
                                       style: GoogleFonts.manrope(
-                                        color: IslaColors.onSurface,
+                                        color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
                                         fontWeight: FontWeight.w800,
                                         fontSize: 52,
                                         letterSpacing: -1.8,
@@ -183,7 +272,7 @@ class AnalyticsPage extends StatelessWidget {
                                     child: Text(
                                       'INSIGHTS & PROGRESS',
                                       style: GoogleFonts.manrope(
-                                        color: IslaColors.onSurfaceVariant,
+                                        color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
                                         fontWeight: FontWeight.w500,
                                         fontSize: 11,
                                         letterSpacing: 3.2,
@@ -196,10 +285,10 @@ class AnalyticsPage extends StatelessWidget {
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
-                                      color: IslaColors.surfaceContainerLow,
+                                      color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
                                       borderRadius: BorderRadius.circular(14),
                                       border: Border.all(
-                                          color: IslaColors.outlineVariant),
+                                          color: isDark ? IslaColors.outlineVariant : const Color(0xFFD4DEE4)),
                                     ),
                                     child: Row(
                                       children: [
@@ -223,7 +312,7 @@ class AnalyticsPage extends StatelessWidget {
                                               Text(
                                                 name,
                                                 style: GoogleFonts.manrope(
-                                                  color: IslaColors.onSurface,
+                                                  color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 18,
                                                 ),
@@ -233,8 +322,7 @@ class AnalyticsPage extends StatelessWidget {
                                                     ? '$sessionCount study sessions completed'
                                                     : 'Start a focus session to track progress',
                                                 style: GoogleFonts.inter(
-                                                  color: IslaColors
-                                                      .onSurfaceVariant,
+                                                  color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -287,7 +375,7 @@ class AnalyticsPage extends StatelessWidget {
                                     Text(
                                       'Study Time by Subject',
                                       style: GoogleFonts.manrope(
-                                        color: IslaColors.onSurface,
+                                        color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
                                         fontWeight: FontWeight.w700,
                                         fontSize: 17,
                                       ),
@@ -297,7 +385,7 @@ class AnalyticsPage extends StatelessWidget {
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
-                                        color: IslaColors.surfaceContainerLow,
+                                        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Column(
@@ -322,15 +410,14 @@ class AnalyticsPage extends StatelessWidget {
                                     Container(
                                       padding: const EdgeInsets.all(20),
                                       decoration: BoxDecoration(
-                                        color: IslaColors.surfaceContainerLow,
+                                        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Center(
                                         child: Text(
                                           'Complete focus sessions to see subject breakdown',
                                           style: GoogleFonts.inter(
-                                              color:
-                                                  IslaColors.onSurfaceVariant,
+                                              color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
                                               fontSize: 13),
                                           textAlign: TextAlign.center,
                                         ),
@@ -354,7 +441,14 @@ class AnalyticsPage extends StatelessWidget {
           },
         ),
       ),
+            // close Expanded(child: StreamBuilder)
+          ],
+          // close Column children
+        ),
+        // close SafeArea
+      ),
     );
+    // close Scaffold
   }
 }
 
@@ -368,15 +462,16 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: IslaColors.surfaceContainerLow,
+        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          Icon(icon, color: IslaColors.primary),
+          Icon(icon, color: isDark ? IslaColors.primary : const Color(0xFF007E90)),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,7 +480,7 @@ class _StatTile extends StatelessWidget {
               Text(
                 value,
                 style: GoogleFonts.manrope(
-                  color: IslaColors.onSurface,
+                  color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                 ),
@@ -393,7 +488,7 @@ class _StatTile extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: IslaColors.onSurfaceVariant,
+                  color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
                   fontSize: 12,
                 ),
               ),
@@ -415,6 +510,11 @@ class _SubjectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final surfaceHigh = isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -424,20 +524,20 @@ class _SubjectRow extends StatelessWidget {
             Text(
               subject,
               style: GoogleFonts.inter(
-                color: IslaColors.onSurface,
+                color: onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: IslaColors.surfaceContainerHighest,
+                color: surfaceHigh,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: IslaColors.onSurfaceVariant,
+                  color: onMute,
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
                 ),
@@ -451,8 +551,8 @@ class _SubjectRow extends StatelessWidget {
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 8,
-            backgroundColor: IslaColors.surfaceContainerHighest,
-            valueColor: const AlwaysStoppedAnimation(IslaColors.primary),
+            backgroundColor: surfaceHigh,
+            valueColor: AlwaysStoppedAnimation(primary),
           ),
         ),
       ],
@@ -504,6 +604,11 @@ class _MarksSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
+    final surfaceLow = isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _coursesStream(),
       builder: (context, coursesSnap) {
@@ -540,7 +645,7 @@ class _MarksSection extends StatelessWidget {
                     Text(
                       'Marks',
                       style: GoogleFonts.manrope(
-                        color: IslaColors.onSurface,
+                        color: onSurface,
                         fontWeight: FontWeight.w700,
                         fontSize: 17,
                       ),
@@ -551,7 +656,7 @@ class _MarksSection extends StatelessWidget {
                       icon: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('Add Mark'),
                       style: TextButton.styleFrom(
-                        foregroundColor: IslaColors.primary,
+                        foregroundColor: primary,
                       ),
                     ),
                   ],
@@ -561,14 +666,14 @@ class _MarksSection extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: IslaColors.surfaceContainerLow,
+                      color: surfaceLow,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
                       child: Text(
                         'No courses yet.\nAdd courses first, then track your marks here.',
                         style: GoogleFonts.inter(
-                          color: IslaColors.onSurfaceVariant,
+                          color: onMute,
                           fontSize: 13,
                         ),
                         textAlign: TextAlign.center,
@@ -738,7 +843,7 @@ class _MarksSection extends StatelessWidget {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: IslaColors.primary,
-                foregroundColor: Colors.white,
+                foregroundColor: IslaColors.onPrimaryContainer,
               ),
               child: const Text('Save'),
             ),
@@ -800,10 +905,15 @@ class _SubjectMarksCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceLow = isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: IslaColors.surfaceContainerLow,
+        color: surfaceLow,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: _gradeColor.withOpacity(0.2),
@@ -824,7 +934,7 @@ class _SubjectMarksCard extends StatelessWidget {
                       Text(
                         subject,
                         style: GoogleFonts.manrope(
-                          color: IslaColors.onSurface,
+                          color: onSurface,
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -832,7 +942,7 @@ class _SubjectMarksCard extends StatelessWidget {
                       Text(
                         '${marks.length} entr${marks.length == 1 ? 'y' : 'ies'}',
                         style: GoogleFonts.inter(
-                          color: IslaColors.onSurfaceVariant,
+                          color: onMute,
                           fontSize: 11,
                         ),
                       ),
@@ -860,7 +970,7 @@ class _SubjectMarksCard extends StatelessWidget {
                 ],
                 IconButton(
                   icon: Icon(Icons.add_circle_outline_rounded,
-                      color: IslaColors.primary, size: 22),
+                      color: primary, size: 22),
                   tooltip: 'Add mark',
                   onPressed: onAddMark,
                 ),
@@ -907,7 +1017,7 @@ class _SubjectMarksCard extends StatelessWidget {
                 title: Text(
                   m['name'] as String? ?? '',
                   style: GoogleFonts.inter(
-                    color: IslaColors.onSurface,
+                    color: onSurface,
                     fontWeight: FontWeight.w500,
                     fontSize: 13,
                   ),
@@ -924,8 +1034,8 @@ class _SubjectMarksCard extends StatelessWidget {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert,
-                          size: 16, color: IslaColors.onSurfaceVariant),
+                      icon: Icon(Icons.more_vert,
+                          size: 16, color: onMute),
                       onSelected: (v) {
                         if (v == 'delete') {
                           onDeleteMark(m['id'] as String);

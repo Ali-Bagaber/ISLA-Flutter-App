@@ -286,14 +286,16 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
               const SizedBox(height: 20),
 
               // ── Description (for AI checklist context) ───────────────────
-              Text('What is this document about? (optional)', style: AppTheme.labelMedium),
+              Text('What is this document about? (optional)',
+                  style: AppTheme.labelMedium),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _descriptionController,
                 enabled: !_isSaving,
                 maxLines: 3,
                 decoration: const InputDecoration(
-                  hintText: 'e.g. Chapter 3 covers recursion, trees, and sorting algorithms',
+                  hintText:
+                      'e.g. Chapter 3 covers recursion, trees, and sorting algorithms',
                   prefixIcon: Padding(
                     padding: EdgeInsets.only(bottom: 40),
                     child: Icon(Icons.notes_rounded),

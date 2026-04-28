@@ -153,11 +153,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                            color:
+                                AppTheme.primaryColor.withValues(alpha: 0.15),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: pickedBytes != null
-                              ? Image.memory(pickedBytes!, width: 88, height: 88, fit: BoxFit.cover)
+                              ? Image.memory(pickedBytes!,
+                                  width: 88, height: 88, fit: BoxFit.cover)
                               : profile.photoUrl.isNotEmpty
                                   ? Image.network(
                                       profile.photoUrl,
@@ -170,7 +172,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         color: AppTheme.primaryColor,
                                       ),
                                     )
-                                  : const Icon(Icons.person, size: 44, color: AppTheme.primaryColor),
+                                  : const Icon(Icons.person,
+                                      size: 44, color: AppTheme.primaryColor),
                         ),
                         Container(
                           padding: const EdgeInsets.all(5),

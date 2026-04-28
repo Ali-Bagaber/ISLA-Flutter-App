@@ -306,8 +306,8 @@ class _CourseCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name,
-                    style: AppTheme.labelMedium.copyWith(
-                        color: AppTheme.getTextPrimary(isDark))),
+                    style: AppTheme.labelMedium
+                        .copyWith(color: AppTheme.getTextPrimary(isDark))),
                 const SizedBox(height: 6),
                 // Credit selector: 1 2 3 4
                 Row(

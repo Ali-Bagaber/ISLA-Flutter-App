@@ -123,11 +123,13 @@ class AnalyticsPage extends StatelessWidget {
     final bg = isDark ? const Color(0xFF0C0E0F) : const Color(0xFFF4FBFE);
     final appBarBg = isDark ? const Color(0xEE0C0E0F) : const Color(0xF8FFFFFF);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
-    final onSurfaceMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final onSurfaceMute =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     final outlineSoft = isDark
         ? IslaColors.outlineVariant.withValues(alpha: 0.4)
         : const Color(0xFFD4DEE4);
-    final surfaceHigh = isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
+    final surfaceHigh =
+        isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
 
     return Scaffold(
       backgroundColor: bg,
@@ -196,8 +198,7 @@ class AnalyticsPage extends StatelessWidget {
                         child: CircleAvatar(
                           radius: 18,
                           backgroundColor: surfaceHigh,
-                          child:
-                              Icon(Icons.person, color: primary, size: 20),
+                          child: Icon(Icons.person, color: primary, size: 20),
                         ),
                       ),
                     ],
@@ -208,239 +209,279 @@ class AnalyticsPage extends StatelessWidget {
             // ── Content ───────────────────────────────────────────────────
             Expanded(
               child: StreamBuilder<Map<String, dynamic>>(
-          stream: _analyticsStream(),
-          builder: (context, analyticsSnap) {
-            final analytics = analyticsSnap.data ?? {};
-            final totalMins =
-                (analytics['totalStudyTime'] as num? ?? 0).toInt();
-            final sessionCount =
-                (analytics['sessionCount'] as num? ?? 0).toInt();
-            final quizAvg = (analytics['quizAvg'] as num? ?? 0).toInt();
-            final gpa = (analytics['currentGPA'] as num? ?? 0.0).toDouble();
+                stream: _analyticsStream(),
+                builder: (context, analyticsSnap) {
+                  final analytics = analyticsSnap.data ?? {};
+                  final totalMins =
+                      (analytics['totalStudyTime'] as num? ?? 0).toInt();
+                  final sessionCount =
+                      (analytics['sessionCount'] as num? ?? 0).toInt();
+                  final quizAvg = (analytics['quizAvg'] as num? ?? 0).toInt();
+                  final gpa =
+                      (analytics['currentGPA'] as num? ?? 0.0).toDouble();
 
-            return StreamBuilder<int>(
-              stream: _completedTasksStream(),
-              builder: (context, tasksSnap) {
-                final tasksDone = tasksSnap.data ?? 0;
+                  return StreamBuilder<int>(
+                    stream: _completedTasksStream(),
+                    builder: (context, tasksSnap) {
+                      final tasksDone = tasksSnap.data ?? 0;
 
-                return StreamBuilder<Map<String, dynamic>>(
-                  stream: _profileStream(),
-                  builder: (context, profileSnap) {
-                    final profile = profileSnap.data ?? {};
-                    final name = (profile['name'] ??
-                            profile['displayName'] ??
-                            FirebaseAuth.instance.currentUser?.displayName ??
-                            'Student')
-                        .toString();
+                      return StreamBuilder<Map<String, dynamic>>(
+                        stream: _profileStream(),
+                        builder: (context, profileSnap) {
+                          final profile = profileSnap.data ?? {};
+                          final name = (profile['name'] ??
+                                  profile['displayName'] ??
+                                  FirebaseAuth
+                                      .instance.currentUser?.displayName ??
+                                  'Student')
+                              .toString();
 
-                    return StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: _coursesStream(),
-                      builder: (context, coursesSnap) {
-                        final courses = coursesSnap.data ?? [];
-                        final liveGpa = _computeGpa(courses);
-                        final displayGpa = liveGpa > 0 ? liveGpa : gpa;
+                          return StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: _coursesStream(),
+                            builder: (context, coursesSnap) {
+                              final courses = coursesSnap.data ?? [];
+                              final liveGpa = _computeGpa(courses);
+                              final displayGpa = liveGpa > 0 ? liveGpa : gpa;
 
-                        return StreamBuilder<Map<String, int>>(
-                          stream: _subjectMinutesStream(),
-                          builder: (context, subjectSnap) {
-                            final subjectMap = subjectSnap.data ?? {};
-                            final topSubjects = subjectMap.entries.toList()
-                              ..sort((a, b) => b.value.compareTo(a.value));
-                            final maxMins = topSubjects.isEmpty
-                                ? 1
-                                : topSubjects.first.value.clamp(1, 99999);
+                              return StreamBuilder<Map<String, int>>(
+                                stream: _subjectMinutesStream(),
+                                builder: (context, subjectSnap) {
+                                  final subjectMap = subjectSnap.data ?? {};
+                                  final topSubjects = subjectMap.entries
+                                      .toList()
+                                    ..sort(
+                                        (a, b) => b.value.compareTo(a.value));
+                                  final maxMins = topSubjects.isEmpty
+                                      ? 1
+                                      : topSubjects.first.value.clamp(1, 99999);
 
-                            return SingleChildScrollView(
-                              padding:
-                                  const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Center(
-                                    child: Text(
-                                      'Analytics',
-                                      style: GoogleFonts.manrope(
-                                        color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 52,
-                                        letterSpacing: -1.8,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Center(
-                                    child: Text(
-                                      'INSIGHTS & PROGRESS',
-                                      style: GoogleFonts.manrope(
-                                        color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 11,
-                                        letterSpacing: 3.2,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  // Profile banner
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                          color: isDark ? IslaColors.outlineVariant : const Color(0xFFD4DEE4)),
-                                    ),
-                                    child: Row(
+                                  return SingleChildScrollView(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 18, 20, 20),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Container(
-                                          width: 54,
-                                          height: 54,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: IslaColors.cyanToBlue,
+                                        Center(
+                                          child: Text(
+                                            'Analytics',
+                                            style: GoogleFonts.manrope(
+                                              color: isDark
+                                                  ? IslaColors.onSurface
+                                                  : const Color(0xFF0F1A1F),
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 52,
+                                              letterSpacing: -1.8,
+                                            ),
                                           ),
-                                          child: const Icon(Icons.person,
-                                              color: IslaColors
-                                                  .onPrimaryContainer),
                                         ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                        const SizedBox(height: 4),
+                                        Center(
+                                          child: Text(
+                                            'INSIGHTS & PROGRESS',
+                                            style: GoogleFonts.manrope(
+                                              color: isDark
+                                                  ? IslaColors.onSurfaceVariant
+                                                  : const Color(0xFF5A6770),
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 11,
+                                              letterSpacing: 3.2,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        // Profile banner
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(14),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? const Color(0xFF111415)
+                                                : const Color(0xFFEAF2F6),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            border: Border.all(
+                                                color: isDark
+                                                    ? IslaColors.outlineVariant
+                                                    : const Color(0xFFD4DEE4)),
+                                          ),
+                                          child: Row(
                                             children: [
-                                              Text(
-                                                name,
-                                                style: GoogleFonts.manrope(
-                                                  color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 18,
+                                              Container(
+                                                width: 54,
+                                                height: 54,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  gradient:
+                                                      IslaColors.cyanToBlue,
                                                 ),
+                                                child: const Icon(Icons.person,
+                                                    color: IslaColors
+                                                        .onPrimaryContainer),
                                               ),
-                                              Text(
-                                                sessionCount > 0
-                                                    ? '$sessionCount study sessions completed'
-                                                    : 'Start a focus session to track progress',
-                                                style: GoogleFonts.inter(
-                                                  color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
-                                                  fontSize: 12,
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      name,
+                                                      style:
+                                                          GoogleFonts.manrope(
+                                                        color: isDark
+                                                            ? IslaColors
+                                                                .onSurface
+                                                            : const Color(
+                                                                0xFF0F1A1F),
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 18,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      sessionCount > 0
+                                                          ? '$sessionCount study sessions completed'
+                                                          : 'Start a focus session to track progress',
+                                                      style: GoogleFonts.inter(
+                                                        color: isDark
+                                                            ? IslaColors
+                                                                .onSurfaceVariant
+                                                            : const Color(
+                                                                0xFF5A6770),
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
+                                        const SizedBox(height: 12),
+                                        // Stats grid
+                                        GridView.count(
+                                          crossAxisCount: 2,
+                                          shrinkWrap: true,
+                                          physics:
+                                              const NeverScrollableScrollPhysics(),
+                                          mainAxisSpacing: 10,
+                                          crossAxisSpacing: 10,
+                                          childAspectRatio: 1.8,
+                                          children: [
+                                            _StatTile(
+                                              icon: Icons.timer_outlined,
+                                              label: 'Focus',
+                                              value: _formatMinutes(totalMins),
+                                            ),
+                                            _StatTile(
+                                              icon: Icons.task_alt_rounded,
+                                              label: 'Done',
+                                              value: '$tasksDone',
+                                            ),
+                                            _StatTile(
+                                              icon: Icons.school_rounded,
+                                              label: 'GPA',
+                                              value: displayGpa > 0
+                                                  ? displayGpa
+                                                      .toStringAsFixed(2)
+                                                  : '\u2014',
+                                            ),
+                                            _StatTile(
+                                              icon: Icons.quiz_outlined,
+                                              label: 'Quiz Avg',
+                                              value: quizAvg > 0
+                                                  ? '$quizAvg%'
+                                                  : '\u2014',
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 14),
+                                        // Subject study time breakdown
+                                        if (topSubjects.isNotEmpty) ...[
+                                          Text(
+                                            'Study Time by Subject',
+                                            style: GoogleFonts.manrope(
+                                              color: isDark
+                                                  ? IslaColors.onSurface
+                                                  : const Color(0xFF0F1A1F),
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 17,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(14),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? const Color(0xFF111415)
+                                                  : const Color(0xFFEAF2F6),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Column(
+                                              children: topSubjects
+                                                  .take(5)
+                                                  .map(
+                                                    (e) => Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              bottom: 10),
+                                                      child: _SubjectRow(
+                                                        subject: e.key,
+                                                        progress:
+                                                            e.value / maxMins,
+                                                        label: _formatMinutes(
+                                                            e.value),
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                            ),
+                                          ),
+                                        ] else ...[
+                                          Container(
+                                            padding: const EdgeInsets.all(20),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? const Color(0xFF111415)
+                                                  : const Color(0xFFEAF2F6),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                'Complete focus sessions to see subject breakdown',
+                                                style: GoogleFonts.inter(
+                                                    color: isDark
+                                                        ? IslaColors
+                                                            .onSurfaceVariant
+                                                        : const Color(
+                                                            0xFF5A6770),
+                                                    fontSize: 13),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 14),
+                                        // ── Marks section ──────────────────────────
+                                        const _MarksSection(),
                                       ],
                                     ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // Stats grid
-                                  GridView.count(
-                                    crossAxisCount: 2,
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    mainAxisSpacing: 10,
-                                    crossAxisSpacing: 10,
-                                    childAspectRatio: 1.8,
-                                    children: [
-                                      _StatTile(
-                                        icon: Icons.timer_outlined,
-                                        label: 'Focus',
-                                        value: _formatMinutes(totalMins),
-                                      ),
-                                      _StatTile(
-                                        icon: Icons.task_alt_rounded,
-                                        label: 'Done',
-                                        value: '$tasksDone',
-                                      ),
-                                      _StatTile(
-                                        icon: Icons.school_rounded,
-                                        label: 'GPA',
-                                        value: displayGpa > 0
-                                            ? displayGpa.toStringAsFixed(2)
-                                            : '\u2014',
-                                      ),
-                                      _StatTile(
-                                        icon: Icons.quiz_outlined,
-                                        label: 'Quiz Avg',
-                                        value: quizAvg > 0
-                                            ? '$quizAvg%'
-                                            : '\u2014',
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 14),
-                                  // Subject study time breakdown
-                                  if (topSubjects.isNotEmpty) ...[
-                                    Text(
-                                      'Study Time by Subject',
-                                      style: GoogleFonts.manrope(
-                                        color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 17,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Column(
-                                        children: topSubjects
-                                            .take(5)
-                                            .map(
-                                              (e) => Padding(
-                                                padding: const EdgeInsets.only(
-                                                    bottom: 10),
-                                                child: _SubjectRow(
-                                                  subject: e.key,
-                                                  progress: e.value / maxMins,
-                                                  label:
-                                                      _formatMinutes(e.value),
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
-                                      ),
-                                    ),
-                                  ] else ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'Complete focus sessions to see subject breakdown',
-                                          style: GoogleFonts.inter(
-                                              color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
-                                              fontSize: 13),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 14),
-                                  // ── Marks section ──────────────────────────
-                                  const _MarksSection(),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            );
-          },
-        ),
-      ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
             // close Expanded(child: StreamBuilder)
           ],
           // close Column children
@@ -471,7 +512,8 @@ class _StatTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: isDark ? IslaColors.primary : const Color(0xFF007E90)),
+          Icon(icon,
+              color: isDark ? IslaColors.primary : const Color(0xFF007E90)),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,7 +522,8 @@ class _StatTile extends StatelessWidget {
               Text(
                 value,
                 style: GoogleFonts.manrope(
-                  color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
+                  color:
+                      isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                 ),
@@ -488,7 +531,9 @@ class _StatTile extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
+                  color: isDark
+                      ? IslaColors.onSurfaceVariant
+                      : const Color(0xFF5A6770),
                   fontSize: 12,
                 ),
               ),
@@ -512,9 +557,11 @@ class _SubjectRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
-    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final onMute =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
-    final surfaceHigh = isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
+    final surfaceHigh =
+        isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -606,8 +653,10 @@ class _MarksSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
-    final surfaceLow = isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
-    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final surfaceLow =
+        isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
+    final onMute =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _coursesStream(),
@@ -906,10 +955,12 @@ class _SubjectMarksCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceLow = isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
+    final surfaceLow =
+        isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
-    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final onMute =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1034,8 +1085,7 @@ class _SubjectMarksCard extends StatelessWidget {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert,
-                          size: 16, color: onMute),
+                      icon: Icon(Icons.more_vert, size: 16, color: onMute),
                       onSelected: (v) {
                         if (v == 'delete') {
                           onDeleteMark(m['id'] as String);

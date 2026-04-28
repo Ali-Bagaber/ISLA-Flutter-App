@@ -19,11 +19,14 @@ class HomePage extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF0C0E0F) : const Color(0xFFF4FBFE);
     final appBarBg = isDark ? const Color(0xEE0C0E0F) : const Color(0xF8FFFFFF);
-    final surfaceLow = isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
-    final surfaceHigh = isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
+    final surfaceLow =
+        isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6);
+    final surfaceHigh =
+        isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
-    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final onMute =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     final outlineSoft = isDark
         ? IslaColors.outlineVariant.withValues(alpha: 0.4)
         : const Color(0xFFD4DEE4);
@@ -85,7 +88,8 @@ class HomePage extends StatelessWidget {
                           PopupMenuItem(
                             value: 'logout',
                             child: Row(children: [
-                              Icon(Icons.logout_rounded, color: onMute, size: 18),
+                              Icon(Icons.logout_rounded,
+                                  color: onMute, size: 18),
                               const SizedBox(width: 8),
                               const Text('Sign Out'),
                             ]),
@@ -144,7 +148,8 @@ class HomePage extends StatelessWidget {
                                 children: [
                                   CustomPaint(
                                     size: const Size(170, 170),
-                                    painter: _ArcProgressPainter(progress: 0.76),
+                                    painter:
+                                        _ArcProgressPainter(progress: 0.76),
                                   ),
                                   Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -173,7 +178,8 @@ class HomePage extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: const [
-                                _ProgressStat(label: 'Focused', value: '3h 25m'),
+                                _ProgressStat(
+                                    label: 'Focused', value: '3h 25m'),
                                 _ProgressStat(label: 'Tasks', value: '6/8'),
                                 _ProgressStat(label: 'Streak', value: '5d'),
                               ],
@@ -197,7 +203,8 @@ class HomePage extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.lightbulb_outline_rounded, color: primary),
+                            Icon(Icons.lightbulb_outline_rounded,
+                                color: primary),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(

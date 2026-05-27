@@ -32,9 +32,10 @@ dependencies:
 
   # Notifications
   flutter_local_notifications: ^17.2.4
+  timezone: ^0.9.4
 
   # File import
-  file_picker: ^8.1.2
+  file_picker: ^10.0.0
 
   # Networking
   dio: ^5.7.0
@@ -62,12 +63,18 @@ dependencies:
   percent_indicator: ^4.2.3
   flip_card: ^0.7.0
 
+  # Document text extraction (PDF / PPTX / DOCX)
+  syncfusion_flutter_pdf: ^27.1.55
+  archive: ^3.6.1
+  xml: ^6.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
   drift_dev: ^2.21.2
   build_runner: ^2.4.13
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
@@ -75,3 +82,19 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+
+# ── App launcher icon (Android / iOS / Web) ───────────────────────────────────
+# Run: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/isla_logo_1024.png"
+  remove_alpha_ios: true
+  background_color_ios: "#030D1B"
+  adaptive_icon_background: "#030D1B"
+  adaptive_icon_foreground: "assets/images/isla_logo_1024.png"
+  web:
+    generate: true
+    image_path: "assets/images/isla_logo_1024.png"
+    background_color: "#030D1B"
+    theme_color: "#81ECFF"

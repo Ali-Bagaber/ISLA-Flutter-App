@@ -4,15 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart' as provider_pkg;
 import 'config/firebase_runtime_config.dart';
+import 'services/nav_controller.dart';
+import 'services/notification_service.dart';
 import 'screens/auth/auth_gate.dart';
-import 'screens/isla/analytics_page.dart';
-import 'screens/isla/focus_timer_page.dart';
-import 'screens/isla/home_page.dart';
-import 'screens/isla/tasks_page.dart';
-import 'screens/onboarding/finalize_setup_page.dart';
-import 'screens/onboarding/select_intention_page.dart';
-import 'screens/onboarding/splash_page.dart';
-import 'screens/onboarding/value_proposition_page.dart';
+import 'screens/analytics/analytics_screen.dart';
+import 'screens/tasks/tasks_screen.dart';
+import 'screens/onboarding/finalize_setup_screen.dart';
+import 'screens/onboarding/select_intention_screen.dart';
+import 'screens/onboarding/splash_screen.dart';
+import 'screens/onboarding/value_proposition_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 
@@ -23,10 +23,17 @@ Future<void> main() async {
     await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
   }
 
+  await NotificationService.instance.init();
+  // Daily 8 PM streak reminder — schedules once, repeats daily.
+  await NotificationService.instance.scheduleDailyStreakReminder();
+
   runApp(
     ProviderScope(
-      child: provider_pkg.ChangeNotifierProvider(
-        create: (_) => ThemeProvider(),
+      child: provider_pkg.MultiProvider(
+        providers: [
+          provider_pkg.ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          provider_pkg.ChangeNotifierProvider(create: (_) => NavController()),
+        ],
         child: const IslaApp(),
       ),
     ),
@@ -39,52 +46,42 @@ final GoRouter _router = GoRouter(
     GoRoute(
       path: '/splash',
       name: 'splash',
-      builder: (context, state) => const SplashPage(),
+      builder: (context, state) => const SplashScreen(),
     ),
     GoRoute(
       path: '/onboard',
       name: 'onboard',
-      builder: (context, state) => const ValuePropositionPage(),
+      builder: (context, state) => const ValuePropositionScreen(),
     ),
     GoRoute(
       path: '/onboard/value',
       name: 'valueProposition',
-      builder: (context, state) => const ValuePropositionPage(),
+      builder: (context, state) => const ValuePropositionScreen(),
     ),
     GoRoute(
       path: '/onboard/intention',
       name: 'intention',
-      builder: (context, state) => const SelectIntentionPage(),
+      builder: (context, state) => const SelectIntentionScreen(),
     ),
     GoRoute(
       path: '/onboard/finalize',
       name: 'onboardFinalize',
-      builder: (context, state) => const FinalizeSetupPage(),
+      builder: (context, state) => const FinalizeSetupScreen(),
     ),
     GoRoute(
       path: '/setup/finalize',
       name: 'finalizeSetup',
-      builder: (context, state) => const FinalizeSetupPage(),
-    ),
-    GoRoute(
-      path: '/home',
-      name: 'home',
-      builder: (context, state) => const HomePage(),
-    ),
-    GoRoute(
-      path: '/session/focus',
-      name: 'focus',
-      builder: (context, state) => const FocusTimerPage(),
+      builder: (context, state) => const FinalizeSetupScreen(),
     ),
     GoRoute(
       path: '/tasks',
       name: 'tasks',
-      builder: (context, state) => const TasksPage(),
+      builder: (context, state) => const TasksScreen(),
     ),
     GoRoute(
       path: '/analytics',
       name: 'analytics',
-      builder: (context, state) => const AnalyticsPage(),
+      builder: (context, state) => const AnalyticsScreen(),
     ),
     GoRoute(
       path: '/app',

@@ -55,6 +55,12 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
         title: title,
         subject: subject,
         count: _totalCards,
+        documentText: (widget.document['extractedText'] ??
+                widget.document['notes'] ??
+                widget.document['content'] ??
+                widget.document['description'] ??
+                '')
+            .toString(),
         onRetrying: () {
           if (mounted)
             setState(() => _loadingMessage =

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'auth_service.dart';
+import 'document_text_extractor.dart';
 
 class DocumentService {
   static FirebaseFirestore? get _db {
@@ -109,6 +110,13 @@ class DocumentService {
     final sizeBytes = fileBytes.length;
     final sizeLabel = _formatSize(sizeBytes);
 
+    // Extract text from the file so the AI can read its content later.
+    // Empty string for unsupported file types or extraction failures.
+    final extractedText = DocumentTextExtractor.extract(
+      fileName: fileName,
+      bytes: fileBytes,
+    );
+
     await docRef.set({
       'documentId': docRef.id,
       'title': title,
@@ -123,6 +131,8 @@ class DocumentService {
       'processingStatus': 'ready',
       'isArchived': false,
       'notes': description,
+      'extractedText': extractedText,
+      'extractedChars': extractedText.length,
       'userId': userId,
       'uploadDate': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
@@ -163,6 +173,46 @@ class DocumentService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     return ref.id;
+  }
+
+  // ─── Annotations ──────────────────────────────────────────────────────────
+
+  /// Stores hand-drawn strokes on a document.
+  /// Document path: documents/{docId}/annotations/main
+  /// Stroke shape: { color: int, width: double, points: [[x,y], ...] }
+  static Future<void> saveAnnotations({
+    required String documentId,
+    required List<Map<String, dynamic>> strokes,
+  }) async {
+    final db = _db;
+    final userId = _userId;
+    if (db == null || userId == null || documentId.isEmpty) return;
+    await db
+        .collection('documents')
+        .doc(documentId)
+        .collection('annotations')
+        .doc('main')
+        .set({
+      'userId': userId,
+      'strokes': strokes,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Load saved annotations for a document. Returns empty list if none.
+  static Future<List<Map<String, dynamic>>> loadAnnotations(
+      String documentId) async {
+    final db = _db;
+    if (db == null || documentId.isEmpty) return [];
+    final snap = await db
+        .collection('documents')
+        .doc(documentId)
+        .collection('annotations')
+        .doc('main')
+        .get();
+    if (!snap.exists) return [];
+    final raw = (snap.data()?['strokes'] as List?) ?? [];
+    return raw.cast<Map<String, dynamic>>();
   }
 
   /// Delete a document + its Storage file

@@ -24,9 +24,9 @@ class AppTheme {
   static const Color error = IslaColors.error;
   static const Color info = IslaColors.tertiary;
 
-  static const Color libraryBackgroundBase = Color(0xFF0B0E10);
-  static const Color libraryBackgroundTop = Color(0xFF111518);
-  static const Color libraryBackgroundBottom = Color(0xFF090C0D);
+  static const Color libraryBackgroundBase = IslaColors.background;
+  static const Color libraryBackgroundTop = IslaColors.surfaceDim;
+  static const Color libraryBackgroundBottom = IslaColors.background;
   static const Color libraryDivider = Color(0xFF242A2E);
 
   static const BoxDecoration libraryBackgroundDecoration = BoxDecoration(
@@ -95,6 +95,22 @@ class AppTheme {
     Color(0xFFFF8A80),
     Color(0xFF8EE59E),
   ];
+
+  // Brand accents / helpers
+  static Color get primaryAccent => primaryLight;
+
+  static LinearGradient getPrimaryGradient(bool isDark) => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [primaryLight, primaryColor],
+      );
+
+  static Color getGlowColor(bool isDark) =>
+      isDark ? const Color(0xFF00E3FD) : const Color(0xFF00A8D8);
+
+  static Color getAppBarBg(bool isDark) =>
+      isDark ? const Color(0xEE030D1B) : const Color(0xF8FFFFFF);
+
 
   static const Color backgroundColor = darkBackground;
   static const Color surfaceColor = darkSurface;

@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../../services/document_service.dart';
 import '../../services/gemini_checklist_service.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/user_settings_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
@@ -18,18 +20,20 @@ class TimerScreen extends StatefulWidget {
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-enum _SessionFlowStep { list, setup, checklist, timer, complete }
+enum _SessionFlowStep { list, setup, checklist, timer, verify, complete }
 
 class _TimerScreenState extends State<TimerScreen>
     with SingleTickerProviderStateMixin {
-  static const int _workDurationMinutes = 25;
-  static const int _breakDurationMinutes = 5;
+  // Mutable defaults — overwritten on init from UserSettingsService.
+  int _workDurationMinutes = 25;
+  int _breakDurationMinutes = 5;
+  int _defaultCycles = 4;
   static const Duration _checklistRequestCooldown = Duration(seconds: 3);
-  static const Duration _rateLimitBackoff = Duration(minutes: 1);
   static const Duration _minimumChecklistLoadingDuration = Duration(seconds: 3);
 
-  int _currentSeconds = _workDurationMinutes * 60;
-  int _phaseTotalSeconds = _workDurationMinutes * 60;
+  // Seeded with the default work duration (25); overridden after settings load.
+  int _currentSeconds = 25 * 60;
+  int _phaseTotalSeconds = 25 * 60;
   int _completedSessions = 0;
   int _plannedCycles = 1;
   bool _isRunning = false;
@@ -62,12 +66,25 @@ class _TimerScreenState extends State<TimerScreen>
   bool _showAllTasksSuccessCheck = false;
   int _lastGeneratedCount = 0;
   DateTime? _lastChecklistRequestAt;
-  DateTime? _aiBackoffUntil;
   _SessionFlowStep _flowStep = _SessionFlowStep.list;
   bool _isForwardFlow = true;
 
   /// Document linked for AI context in the current session
   Map<String, dynamic>? _linkedDoc;
+
+  /// True for ~1.4s right after the final cycle finishes — drives a smooth
+  /// "ring → checkmark" celebration animation inside the timer circle before
+  /// the flow advances to the Quick Check step.
+  bool _isCompleteAnimating = false;
+
+  // ── Verification / Quick Check state ────────────────────────────────────────
+  bool _verifyLoading = false;
+  String? _verifyError;
+  List<Map<String, dynamic>> _verifyQuestions = [];
+  final Map<int, int> _verifyAnswers = {}; // questionIndex → selectedOption
+  int _verifyCorrect = 0;
+  int _verifyTotal = 0;
+  bool _verifySubmitted = false;
 
   late AnimationController _pulseController;
 
@@ -78,6 +95,32 @@ class _TimerScreenState extends State<TimerScreen>
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat(reverse: true);
+    _loadFocusPrefs();
+  }
+
+  /// Pull the user's saved focus prefs (work/break/cycles) and apply them
+  /// as the timer defaults. Falls back to the seeded 25/5/4 if anything fails.
+  Future<void> _loadFocusPrefs() async {
+    try {
+      final s = await UserSettingsService.loadSettings();
+      final f = (s['focus'] as Map?)?.cast<String, dynamic>() ?? {};
+      final work = (f['workMinutes'] as num?)?.toInt() ?? 25;
+      final brk = (f['breakMinutes'] as num?)?.toInt() ?? 5;
+      final cycles = (f['cycles'] as num?)?.toInt() ?? 4;
+      if (!mounted) return;
+      setState(() {
+        _workDurationMinutes = work;
+        _breakDurationMinutes = brk;
+        _defaultCycles = cycles;
+        // Only seed the counters if the timer hasn't started yet.
+        if (!_isRunning && _completedSessions == 0) {
+          _currentSeconds = work * 60;
+          _phaseTotalSeconds = work * 60;
+        }
+      });
+    } catch (_) {
+      // ignore — defaults already in place
+    }
   }
 
   @override
@@ -102,7 +145,7 @@ class _TimerScreenState extends State<TimerScreen>
   void _startTimer() {
     final selectedCount = _checklist.where((item) => item.isSelected).length;
     setState(() {
-      _plannedCycles = max(1, selectedCount);
+      _plannedCycles = selectedCount > 0 ? selectedCount : _defaultCycles;
       _phaseTotalSeconds = max(_phaseTotalSeconds, _currentSeconds);
       _isRunning = true;
     });
@@ -148,7 +191,6 @@ class _TimerScreenState extends State<TimerScreen>
     _showAllTasksSuccessCheck = false;
     _lastGeneratedCount = 0;
     _lastChecklistRequestAt = null;
-    _aiBackoffUntil = null;
     _linkedDoc = null;
   }
 
@@ -162,8 +204,10 @@ class _TimerScreenState extends State<TimerScreen>
         return 2;
       case _SessionFlowStep.timer:
         return 3;
-      case _SessionFlowStep.complete:
+      case _SessionFlowStep.verify:
         return 4;
+      case _SessionFlowStep.complete:
+        return 5;
     }
   }
 
@@ -262,6 +306,12 @@ class _TimerScreenState extends State<TimerScreen>
     setState(() => _isRunning = false);
 
     if (!_isBreak) {
+      // Fire a system notification so the user knows the focus block ended
+      // even if the app is backgrounded.
+      NotificationService.instance.showPomodoroComplete(
+        subject: _sessionSubjectController.text.trim(),
+      );
+
       var allDoneNow = false;
       setState(() {
         _completedSessions++;
@@ -273,25 +323,26 @@ class _TimerScreenState extends State<TimerScreen>
       }
 
       if (_completedSessions >= _plannedCycles) {
-        final selectedChecklistCount =
-            _checklist.where((item) => item.isSelected).length;
-        final completedChecklistCount = _checklist
-            .where((item) => item.isSelected && item.isCompleted)
-            .length;
-
-        // Save session to Firestore
-        GeminiStudyService.saveSession(
-          focusMinutes: _completedSessions * _workDurationMinutes,
-          cycles: _completedSessions,
-          subject: _sessionSubjectController.text.trim(),
-          checklistDone: completedChecklistCount,
-          checklistTotal: selectedChecklistCount,
-        );
+        // Play a brief ring → checkmark animation, THEN advance to Quick Check.
+        // Saving the session is deferred until after verification so the score
+        // can include the verification result.
         setState(() {
-          _isBreak = false;
-          _currentSeconds = _workDurationMinutes * 60;
-          _phaseTotalSeconds = _workDurationMinutes * 60;
-          _setFlowStep(_SessionFlowStep.complete);
+          _isCompleteAnimating = true;
+          // The ring is a countdown (full → empty). For the celebration we
+          // want it full again — set currentSeconds back to the phase total
+          // so _progress == 1.0 and the ring renders completely filled.
+          _currentSeconds = _phaseTotalSeconds;
+        });
+        Future.delayed(const Duration(milliseconds: 1400), () {
+          if (!mounted) return;
+          setState(() {
+            _isCompleteAnimating = false;
+            _isBreak = false;
+            _currentSeconds = _workDurationMinutes * 60;
+            _phaseTotalSeconds = _workDurationMinutes * 60;
+            _setFlowStep(_SessionFlowStep.verify);
+          });
+          _loadVerifyQuestions();
         });
         return;
       }
@@ -495,21 +546,6 @@ class _TimerScreenState extends State<TimerScreen>
     });
   }
 
-  bool _shouldUseLocalFallback(String message) {
-    final lower = message.toLowerCase();
-    return lower.contains('429') ||
-        lower.contains('quota') ||
-        lower.contains('rate limit') ||
-        lower.contains('network error');
-  }
-
-  bool _isRateLimitMessage(String message) {
-    final lower = message.toLowerCase();
-    return lower.contains('429') ||
-        lower.contains('quota') ||
-        lower.contains('rate limit');
-  }
-
   List<String> _extractKeywords(String text, {int maxKeywords = 8}) {
     const stopwords = <String>{
       'the',
@@ -677,101 +713,6 @@ class _TimerScreenState extends State<TimerScreen>
     return accepted;
   }
 
-  List<String> _buildLocalChecklistCandidates({
-    required String goal,
-    required String source,
-    required String subject,
-  }) {
-    final topic = _topicLabel(subject: subject, goal: goal, source: source);
-    final keywords = _extractKeywords('$subject $goal $source', maxKeywords: 8)
-        .map(_titleCaseWord)
-        .toList();
-
-    final k1 = keywords.isNotEmpty ? keywords[0] : topic;
-    final k2 = keywords.length > 1 ? keywords[1] : topic;
-    final k3 = keywords.length > 2 ? keywords[2] : topic;
-    final goalText = goal.trim();
-    final goalSnippet = goalText.isEmpty ? topic : _clip(goalText, max: 54);
-
-    final sourceSentence = source
-        .split(RegExp(r'[\n\r\.]'))
-        .map((s) => s.trim())
-        .firstWhere((s) => s.length > 15, orElse: () => '');
-    final sourceSnippet = sourceSentence.isEmpty ? '' : _clip(sourceSentence);
-
-    final templates = <String Function()>[
-      () => 'List the 3 subtopics in $topic you should finish first.',
-      () => 'Write a short explanation of the hardest part of $k1.',
-      () => 'Answer one self-test question about $k2 without checking notes.',
-      () => 'After cycle one, summarize $topic in 4 bullet points.',
-      () => 'Choose one mini-step that moves "$goalSnippet" forward now.',
-      () => 'Solve one focused example on $k3 and note where you got stuck.',
-      () =>
-          'Review your notes and mark one $topic concept that is still unclear.',
-      () => 'Teach one idea from $k1 out loud in under 90 seconds.',
-      () => 'Write a quick success check for this session on $topic.',
-      () => 'Create one recall prompt for $k2 and answer it from memory.',
-      if (sourceSnippet.isNotEmpty)
-        () => 'Turn this note into one actionable step: "$sourceSnippet"',
-      if (goalText.isNotEmpty)
-        () => 'Define what "done" looks like for "$goalSnippet" this session.',
-    ];
-
-    final rotationSeed =
-        (subject.hashCode + goal.hashCode + source.hashCode + _checklist.length)
-            .abs();
-    final rotation = templates.isEmpty ? 0 : rotationSeed % templates.length;
-
-    final ordered = <String>[];
-    for (var i = 0; i < templates.length; i++) {
-      ordered.add(templates[(i + rotation) % templates.length]());
-    }
-    return ordered;
-  }
-
-  List<String> _buildLocalChecklist({
-    required String goal,
-    required String source,
-    String? subject,
-    required int count,
-    List<String> existingItems = const [],
-  }) {
-    final candidates = _buildLocalChecklistCandidates(
-      goal: goal,
-      source: source,
-      subject: (subject ?? '').trim(),
-    );
-
-    final fresh = _takeFreshChecklistItems(
-      candidates: candidates,
-      needed: count,
-      existingItems: existingItems,
-    );
-
-    if (fresh.length >= count) {
-      return fresh;
-    }
-
-    final topic =
-        _topicLabel(subject: subject ?? '', goal: goal, source: source);
-    final extras = <String>[
-      'Do a 2-minute recall of $topic without looking at notes.',
-      'Write one question on $topic and answer it from memory.',
-      'Mark one weak point in $topic and plan a quick follow-up action.',
-      'End this cycle by checking if your $topic goal was met.',
-    ];
-
-    fresh.addAll(
-      _takeFreshChecklistItems(
-        candidates: extras,
-        needed: count - fresh.length,
-        existingItems: [...existingItems, ...fresh],
-      ),
-    );
-
-    return fresh;
-  }
-
   Future<void> _generateChecklist({bool isRetry = false}) async {
     if (_isGeneratingChecklist) return;
 
@@ -784,12 +725,20 @@ class _TimerScreenState extends State<TimerScreen>
     final docSubject = (_linkedDoc?['subject'] as String? ?? '').trim();
     final docType = (_linkedDoc?['type'] as String? ?? '').trim();
     final docNotes = (_linkedDoc?['notes'] as String? ?? '').trim();
+    final docExtracted =
+        (_linkedDoc?['extractedText'] as String? ?? '').trim();
+    // Trim file content for the prompt — checklist only needs ~6k chars of context.
+    final docExtractedSnippet = docExtracted.length > 6000
+        ? '${docExtracted.substring(0, 6000)}\n\n[...content truncated...]'
+        : docExtracted;
     final docContext = _linkedDoc != null
         ? [
             if (docTitle.isNotEmpty) 'Document title: "$docTitle"',
             if (docSubject.isNotEmpty) 'Document subject: $docSubject',
             if (docType.isNotEmpty) 'Document type: $docType',
             if (docNotes.isNotEmpty) 'Document notes: $docNotes',
+            if (docExtractedSnippet.isNotEmpty)
+              'Document content:\n$docExtractedSnippet',
           ].join('\n')
         : '';
 
@@ -834,33 +783,6 @@ class _TimerScreenState extends State<TimerScreen>
         await Future.delayed(queuedDelay);
       }
 
-      if (_aiBackoffUntil != null &&
-          DateTime.now().isBefore(_aiBackoffUntil!)) {
-        final fallback = _buildLocalChecklist(
-          goal: goal,
-          source: source,
-          subject: subject,
-          count: requestedNewItems,
-          existingItems: existingTitles,
-        );
-        if (fallback.isEmpty) {
-          setState(() {
-            _checklistError =
-                'No fresh items were found. Refine your goal and try again.';
-          });
-          return;
-        }
-        setState(() {
-          _checklist.addAll(fallback.map(_SessionChecklistItem.fromTitle));
-          _lastGeneratedCount = fallback.length;
-          _checklistError = null;
-          _showChecklistSuccess = true;
-          _refreshChecklistFocus();
-        });
-        _markChecklistGenerated();
-        return;
-      }
-
       _lastChecklistRequestAt = DateTime.now();
 
       final items = await _geminiChecklistService.generateChecklist(
@@ -876,26 +798,17 @@ class _TimerScreenState extends State<TimerScreen>
         existingItems: existingTitles,
       );
 
-      final fallback = _buildLocalChecklist(
-        goal: goal,
-        source: source,
-        subject: subject,
-        count: requestedNewItems - freshFromAi.length,
-        existingItems: [...existingTitles, ...freshFromAi],
-      );
-
-      final combined = [...freshFromAi, ...fallback];
-      if (combined.isEmpty) {
+      if (freshFromAi.isEmpty) {
         setState(() {
           _checklistError =
-              'No new checklist items were produced. Add more context and retry.';
+              'AI returned no usable items. Refine your goal and try again.';
         });
         return;
       }
 
       setState(() {
-        _checklist.addAll(combined.map(_SessionChecklistItem.fromTitle));
-        _lastGeneratedCount = combined.length;
+        _checklist.addAll(freshFromAi.map(_SessionChecklistItem.fromTitle));
+        _lastGeneratedCount = freshFromAi.length;
         _checklistError = null;
         _showChecklistSuccess = true;
         _refreshChecklistFocus();
@@ -903,38 +816,9 @@ class _TimerScreenState extends State<TimerScreen>
       _markChecklistGenerated();
     } catch (error) {
       final message = error.toString().replaceAll('StateError: ', '').trim();
-
-      if (_shouldUseLocalFallback(message)) {
-        if (_isRateLimitMessage(message)) {
-          _aiBackoffUntil = DateTime.now().add(_rateLimitBackoff);
-        }
-        final fallback = _buildLocalChecklist(
-          goal: goal,
-          source: source,
-          subject: subject,
-          count: requestedNewItems,
-          existingItems: existingTitles,
-        );
-        if (fallback.isEmpty) {
-          setState(() {
-            _checklistError =
-                'No fresh items were found. Update your goal and retry.';
-          });
-          return;
-        }
-        setState(() {
-          _checklist.addAll(fallback.map(_SessionChecklistItem.fromTitle));
-          _lastGeneratedCount = fallback.length;
-          _checklistError = null;
-          _showChecklistSuccess = true;
-          _refreshChecklistFocus();
-        });
-        _markChecklistGenerated();
-      } else {
-        setState(() {
-          _checklistError = isRetry ? 'Retry failed: $message' : message;
-        });
-      }
+      setState(() {
+        _checklistError = isRetry ? 'Retry failed: $message' : message;
+      });
     } finally {
       final elapsed = DateTime.now().difference(startedAt);
       if (elapsed < _minimumChecklistLoadingDuration) {
@@ -973,6 +857,11 @@ class _TimerScreenState extends State<TimerScreen>
   }
 
   void _showCycleCompleteDialog() {
+    if (!mounted) return;
+    // Don't block the user if they navigated away to a sub-screen
+    // (e.g. document annotate, GPA calculator). The notification we
+    // already fired in _onTimerFinished informs them.
+    if (Navigator.of(context).canPop()) return;
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1289,6 +1178,494 @@ class _TimerScreenState extends State<TimerScreen>
     );
   }
 
+  // ── Quick Check (verification) ────────────────────────────────────────────
+
+  Future<void> _loadVerifyQuestions() async {
+    setState(() {
+      _verifyLoading = true;
+      _verifyError = null;
+      _verifyQuestions = [];
+      _verifyAnswers.clear();
+      _verifyCorrect = 0;
+      _verifyTotal = 0;
+      _verifySubmitted = false;
+    });
+    try {
+      final docTitle = (_linkedDoc?['title'] as String?) ??
+          _sessionSubjectController.text.trim();
+      final docSubject = (_linkedDoc?['subject'] as String?) ??
+          _sessionSubjectController.text.trim();
+      final extracted = (_linkedDoc?['extractedText'] as String? ?? '').trim();
+      final goal = _goalController.text.trim();
+      final source = extracted.isNotEmpty
+          ? extracted
+          : (goal.isNotEmpty
+              ? 'Study goal: $goal'
+              : (_sourceController.text.trim()));
+
+      final qs = await GeminiStudyService().generateQuiz(
+        title: docTitle.isEmpty ? 'this session' : docTitle,
+        subject: docSubject.isEmpty ? 'General' : docSubject,
+        count: 3,
+        documentText: source,
+      );
+      if (!mounted) return;
+      setState(() {
+        _verifyQuestions = qs.take(3).toList();
+        _verifyLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifyLoading = false;
+        _verifyError = e
+            .toString()
+            .replaceAll('StateError: ', '')
+            .replaceAll('Bad state: ', '');
+      });
+    }
+  }
+
+  void _submitVerify() {
+    if (_verifyQuestions.isEmpty) return;
+    int correct = 0;
+    for (var i = 0; i < _verifyQuestions.length; i++) {
+      final picked = _verifyAnswers[i];
+      final ans = (_verifyQuestions[i]['correct'] as num?)?.toInt() ?? 0;
+      if (picked != null && picked == ans) correct++;
+    }
+    setState(() {
+      _verifyCorrect = correct;
+      _verifyTotal = _verifyQuestions.length;
+      _verifySubmitted = true;
+    });
+    _saveSessionWithVerification(
+        correct: correct, total: _verifyQuestions.length);
+  }
+
+  void _skipVerify() {
+    setState(() {
+      _verifyCorrect = 0;
+      _verifyTotal = 0;
+      _verifySubmitted = true;
+    });
+    _saveSessionWithVerification(correct: 0, total: 0);
+  }
+
+  void _saveSessionWithVerification(
+      {required int correct, required int total}) {
+    final selectedChecklistCount =
+        _checklist.where((item) => item.isSelected).length;
+    final completedChecklistCount =
+        _checklist.where((item) => item.isSelected && item.isCompleted).length;
+
+    // Save (non-blocking) and move to summary step.
+    GeminiStudyService.saveSession(
+      focusMinutes: _completedSessions * _workDurationMinutes,
+      cycles: _completedSessions,
+      subject: _sessionSubjectController.text.trim(),
+      checklistDone: completedChecklistCount,
+      checklistTotal: selectedChecklistCount,
+      verifiedCorrect: correct,
+      verifiedTotal: total,
+    );
+    setState(() => _setFlowStep(_SessionFlowStep.complete));
+  }
+
+  /// Same formula used in GeminiStudyService.saveSession — duplicated here
+  /// so the Complete screen can show a transparent breakdown.
+  ({int total, int cycleScore, int checklistScore, int verifyScore})
+      _computeSessionScore({
+    required int checklistDone,
+    required int checklistTotal,
+    required int cycles,
+    required int verifiedCorrect,
+    required int verifiedTotal,
+  }) {
+    final checklistRatio =
+        checklistTotal > 0 ? (checklistDone / checklistTotal).clamp(0.0, 1.0) : 0.0;
+    final cycleScore = (min(cycles, 4) * 10);
+    final checklistScore = (checklistRatio * 20).round();
+    final verifyRatio =
+        verifiedTotal > 0 ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0) : 0.0;
+    final verifyScore = (verifyRatio * 30).round();
+    const base = 10;
+    final total =
+        (base + cycleScore + checklistScore + verifyScore).clamp(0, 100);
+    return (
+      total: total,
+      cycleScore: cycleScore,
+      checklistScore: checklistScore,
+      verifyScore: verifyScore,
+    );
+  }
+
+  Widget _buildScoreBreakdown({
+    required bool isDark,
+    required int checklistDone,
+    required int checklistTotal,
+    required int cycles,
+    required int verifiedCorrect,
+    required int verifiedTotal,
+  }) {
+    final s = _computeSessionScore(
+      checklistDone: checklistDone,
+      checklistTotal: checklistTotal,
+      cycles: cycles,
+      verifiedCorrect: verifiedCorrect,
+      verifiedTotal: verifiedTotal,
+    );
+    final textPrimary = AppTheme.getTextPrimary(isDark);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+    final cardBg = AppTheme.getCardColor(isDark);
+    final surface = AppTheme.getSurfaceColor(isDark);
+    final color = s.total >= 75
+        ? AppTheme.success
+        : (s.total >= 50 ? AppTheme.primaryColor : AppTheme.warning);
+
+    Widget row(String label, int score, int max, String reason) {
+      final ratio = max == 0 ? 0.0 : (score / max).clamp(0.0, 1.0);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(label,
+                      style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                ),
+                Text('$score / $max',
+                    style: TextStyle(
+                        color: textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 6,
+                backgroundColor: surface,
+                valueColor: AlwaysStoppedAnimation(color),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(reason,
+                style: TextStyle(color: textSecondary, fontSize: 11)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Session Score',
+                style: TextStyle(
+                  color: textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${s.total}',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 8),
+                child: Text(
+                  ' / 100',
+                  style: TextStyle(color: textSecondary, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Earned from cycles completed, checklist progress and Quick Check answers.',
+            style: TextStyle(color: textSecondary, fontSize: 11, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+          Divider(color: surface, height: 1),
+          row('Base', 10, 10, 'Every completed session.'),
+          row('Cycles', s.cycleScore, 40,
+              '$cycles cycle${cycles == 1 ? '' : 's'} × 10 (cap 4)'),
+          row('Checklist', s.checklistScore, 20,
+              '$checklistDone of $checklistTotal items done'),
+          row(
+            'Verification',
+            s.verifyScore,
+            30,
+            verifiedTotal == 0
+                ? 'Skipped Quick Check — no points'
+                : '$verifiedCorrect of $verifiedTotal questions correct',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerifyStep(bool isDark) {
+    final textPrimary = AppTheme.getTextPrimary(isDark);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+    final cardBg = AppTheme.getCardColor(isDark);
+    final surface = AppTheme.getSurfaceColor(isDark);
+    const accent = AppTheme.primaryColor;
+
+    final allAnswered = _verifyQuestions.isNotEmpty &&
+        _verifyAnswers.length == _verifyQuestions.length;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Intro card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  accent.withValues(alpha: 0.18),
+                  accent.withValues(alpha: 0.06),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.quiz_outlined,
+                        color: AppTheme.primaryColor, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'Quick Check',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Answer 3 short questions about what you just studied. Your score becomes part of the Session Score.',
+                  style: TextStyle(
+                      color: textSecondary, fontSize: 12, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (_verifyLoading)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 60),
+              alignment: Alignment.center,
+              child: Column(
+                children: const [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 14),
+                  Text('Generating questions from your study material...',
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.grey)),
+                ],
+              ),
+            )
+          else if (_verifyError != null)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: AppTheme.error.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.error_outline,
+                      color: AppTheme.error, size: 32),
+                  const SizedBox(height: 8),
+                  Text(_verifyError!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: textPrimary)),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: _skipVerify,
+                        child: const Text('Skip'),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: _loadVerifyQuestions,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            ...List.generate(_verifyQuestions.length, (qi) {
+              final q = _verifyQuestions[qi];
+              final question = (q['question'] ?? '').toString();
+              final options =
+                  ((q['options'] as List?) ?? []).cast<String>().toList();
+              final picked = _verifyAnswers[qi];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: surface),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Question ${qi + 1} of ${_verifyQuestions.length}',
+                        style: TextStyle(
+                            color: textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1)),
+                    const SizedBox(height: 6),
+                    Text(question,
+                        style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4)),
+                    const SizedBox(height: 10),
+                    ...List.generate(options.length, (oi) {
+                      final selected = picked == oi;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () => setState(() => _verifyAnswers[qi] = oi),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? accent.withValues(alpha: 0.12)
+                                  : surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: selected
+                                    ? accent
+                                    : surface,
+                                width: 1.4,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  selected
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 18,
+                                  color:
+                                      selected ? accent : textSecondary,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(options[oi],
+                                      style: TextStyle(
+                                        color: textPrimary,
+                                        fontSize: 13,
+                                      )),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              );
+            }),
+
+          if (_verifyQuestions.isNotEmpty && _verifyError == null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _skipVerify,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: textSecondary),
+                    ),
+                    child: const Text('Skip'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: allAnswered ? _submitVerify : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline_rounded),
+                    label: Text(allAnswered
+                        ? 'Submit & See Score'
+                        : 'Answer ${_verifyQuestions.length - _verifyAnswers.length} more'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   String _titleForStep() {
     switch (_flowStep) {
       case _SessionFlowStep.list:
@@ -1299,6 +1676,8 @@ class _TimerScreenState extends State<TimerScreen>
         return 'AI Checklist';
       case _SessionFlowStep.timer:
         return 'Focus Timer';
+      case _SessionFlowStep.verify:
+        return 'Quick Check';
       case _SessionFlowStep.complete:
         return 'Session Complete';
     }
@@ -1325,6 +1704,11 @@ class _TimerScreenState extends State<TimerScreen>
         return _buildStepEntrance(
           key: const ValueKey('animated-timer-step'),
           child: _buildTimerStep(isDark),
+        );
+      case _SessionFlowStep.verify:
+        return _buildStepEntrance(
+          key: const ValueKey('animated-verify-step'),
+          child: _buildVerifyStep(isDark),
         );
       case _SessionFlowStep.complete:
         return _buildStepEntrance(
@@ -2114,23 +2498,127 @@ class _TimerScreenState extends State<TimerScreen>
   Widget _buildTimerStep(bool isDark) {
     return SingleChildScrollView(
       key: const ValueKey('session-timer-step'),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       child: Column(
         children: [
-          _buildSessionInfoCard(isDark),
-          const SizedBox(height: 12),
-          _buildAiAdviceCard(isDark),
-          const SizedBox(height: 16),
-          _buildTimerCircle(isDark),
+          _buildCurrentTaskCard(isDark),
+          const SizedBox(height: 20),
+          Center(child: _buildTimerCircle(isDark)),
           const SizedBox(height: 16),
           _buildUpcomingPhaseCard(isDark),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           _buildControlButtons(isDark),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+          _buildAiAdviceCard(isDark),
+          const SizedBox(height: 12),
           _buildActiveChecklistPreview(isDark),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _buildStatsCard(isDark),
+          const SizedBox(height: 20),
+          _buildExitFocusButton(isDark),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentTaskCard(bool isDark) {
+    final subject = _sessionSubjectController.text.trim();
+    final goal = _goalController.text.trim();
+    final selected = _checklist.where((item) => item.isSelected).toList();
+    final activeItem = selected.firstWhere(
+      (item) => !item.isCompleted,
+      orElse: () => selected.isNotEmpty ? selected.last : _SessionChecklistItem(id: '', title: ''),
+    );
+    final taskName = activeItem.title.isNotEmpty ? activeItem.title : (goal.isNotEmpty ? goal : 'Focus Session');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: AppTheme.getCardDecoration(
+        isDark,
+        accent: _isBreak ? AppTheme.success : AppTheme.primaryColor,
+        accentAlpha: 0.1,
+        borderAlpha: 0.28,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _isBreak ? 'BREAK TIME' : 'CURRENT TASK',
+                style: AppTheme.bodySmall.copyWith(
+                  color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_completedSessions + (_isBreak ? 1 : 0)} of $_plannedCycles',
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.getTextSecondary(isDark),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            taskName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.headingSmall.copyWith(
+              color: AppTheme.getTextPrimary(isDark),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (subject.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              subject,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppTheme.getTextSecondary(isDark),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExitFocusButton(bool isDark) {
+    return OutlinedButton.icon(
+      onPressed: () {
+        _timer?.cancel();
+        setState(() {
+          _isRunning = false;
+          _setFlowStep(_SessionFlowStep.checklist);
+        });
+      },
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 52),
+        side: BorderSide(
+          color: AppTheme.primaryColor.withValues(alpha: 0.4),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        foregroundColor: AppTheme.primaryColor,
+      ),
+      icon: const Icon(Icons.logout_rounded, size: 18),
+      label: const Text(
+        'Exit Focus Mode',
+        style: TextStyle(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -2356,6 +2844,17 @@ class _TimerScreenState extends State<TimerScreen>
             ),
           ),
           const SizedBox(height: 14),
+
+          // ── Session Score breakdown ────────────────────────────────────────
+          _buildScoreBreakdown(
+            isDark: isDark,
+            checklistDone: done,
+            checklistTotal: selected.length,
+            cycles: _completedSessions,
+            verifiedCorrect: _verifyCorrect,
+            verifiedTotal: _verifyTotal,
+          ),
+          const SizedBox(height: 14),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -2486,95 +2985,36 @@ class _TimerScreenState extends State<TimerScreen>
     );
   }
 
-  Widget _buildSessionInfoCard(bool isDark) {
-    final subject = _sessionSubjectController.text.trim();
-    final goal = _goalController.text.trim();
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.getCardDecoration(
-        isDark,
-        accent: _isBreak ? AppTheme.success : AppTheme.primaryColor,
-        accentAlpha: 0.1,
-        borderAlpha: 0.25,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _isBreak ? Icons.coffee_rounded : Icons.psychology_rounded,
-                    color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _isBreak ? 'Break Time (5 min)' : 'Focus Session (25 min)',
-                    style: AppTheme.labelMedium.copyWith(
-                      color:
-                          _isBreak ? AppTheme.success : AppTheme.primaryColor,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                '$_completedSessions/$_plannedCycles',
-                style: AppTheme.labelMedium.copyWith(
-                  color: _isBreak ? AppTheme.success : AppTheme.primaryColor,
-                ),
-              ),
-            ],
-          ),
-          if (subject.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Subject: $subject',
-              style: AppTheme.bodySmall.copyWith(
-                color: AppTheme.getTextSecondary(isDark),
-              ),
-            ),
-          ],
-          if (goal.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Goal: ${_clip(goal, max: 70)}',
-              style: AppTheme.bodySmall.copyWith(
-                color: AppTheme.getTextSecondary(isDark),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildTimerCircle(bool isDark) {
-    const accent = AppTheme.primaryColor;
+    final phaseColor = _isBreak ? AppTheme.success : AppTheme.primaryColor;
     final totalSeconds = max(1, _phaseTotalSeconds);
     final tickSize = 1 / totalSeconds;
-    final ringGradient = [
-      AppTheme.primaryLight,
-      AppTheme.primaryColor,
-      AppTheme.subjectColors[5],
-    ];
+    // Tri-stop gradient — light cyan → primary → blue. Switches to green tones on break.
+    final ringGradient = _isBreak
+        ? [
+            const Color(0xFF6EE7B7),
+            AppTheme.success,
+            const Color(0xFF22D3A4),
+          ]
+        : [
+            AppTheme.primaryLight,
+            AppTheme.primaryColor,
+            AppTheme.subjectColors[5],
+          ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width - 32;
-        final ringSize = (availableWidth * 0.62).clamp(208.0, 232.0).toDouble();
-        final ringStroke = (ringSize * 0.06).clamp(13.0, 16.0).toDouble();
-        final orbitPadding = (ringStroke / 2) + 13;
+        final ringSize = (availableWidth * 0.66).clamp(216.0, 248.0).toDouble();
+        final ringStroke = (ringSize * 0.055).clamp(12.0, 15.0).toDouble();
+        final orbitPadding = (ringStroke / 2) + 16;
         final orbitSize = ringSize + (orbitPadding * 2);
-        final orbitDotSize = (ringSize * 0.038).clamp(8.0, 10.0).toDouble();
-        final innerSize = (ringSize * 0.69).clamp(150.0, 170.0).toDouble();
-        final innerPadding = (innerSize * 0.14).clamp(15.0, 20.0).toDouble();
-        final timeFontSize = (ringSize * 0.235).clamp(48.0, 56.0).toDouble();
-        final cycleFontSize = (ringSize * 0.075).clamp(15.0, 18.0).toDouble();
+        final orbitDotSize = (ringSize * 0.034).clamp(7.0, 9.0).toDouble();
+        final innerSize = (ringSize * 0.72).clamp(156.0, 180.0).toDouble();
+        final timeFontSize = (ringSize * 0.23).clamp(48.0, 58.0).toDouble();
+        final cycleFontSize = (ringSize * 0.065).clamp(12.0, 14.0).toDouble();
 
         return SizedBox(
           width: orbitSize,
@@ -2582,121 +3022,270 @@ class _TimerScreenState extends State<TimerScreen>
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // ── Orbit dots (outer ring of small dots) ──────────────────────
               _buildOrbitDots(
                 size: orbitSize,
                 ringSize: ringSize,
                 ringStroke: ringStroke,
                 dotSize: orbitDotSize,
               ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: _isRunning ? 0.22 : 0.1),
-                      blurRadius: _isRunning ? 26 : 16,
-                      spreadRadius: _isRunning ? 1 : 0,
-                    ),
-                  ],
-                ),
-                child: SizedBox(
-                  width: ringSize,
-                  height: ringSize,
-                  child: TweenAnimationBuilder<double>(
-                    key: ValueKey(
-                      'timer-progress-${_currentSeconds}_${_isBreak ? 1 : 0}',
-                    ),
-                    duration: const Duration(milliseconds: 650),
-                    curve: Curves.easeOutCubic,
-                    tween: Tween(
-                      begin: (_progress + tickSize).clamp(0.0, 1.0),
-                      end: _progress.clamp(0.0, 1.0),
-                    ),
-                    builder: (context, value, child) {
-                      return CustomPaint(
-                        painter: _TimerRingPainter(
-                          progress: value,
-                          trackColor: AppTheme.getSurfaceColor(isDark)
-                              .withValues(alpha: 0.58),
-                          gradientColors: ringGradient,
-                          strokeWidth: ringStroke,
+
+              // ── Ambient glow that breathes when running ────────────────────
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, _) {
+                  final pulse = _isRunning ? _pulseController.value : 0;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOut,
+                    width: ringSize,
+                    height: ringSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: phaseColor.withValues(
+                              alpha: _isRunning ? 0.26 + pulse * 0.10 : 0.12),
+                          blurRadius: _isRunning ? 32 + pulse * 6 : 20,
+                          spreadRadius: _isRunning ? 1.5 : 0,
                         ),
-                      );
-                    },
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              // ── Progress ring (track + sweep + leading dot + minute ticks) ─
+              SizedBox(
+                width: ringSize,
+                height: ringSize,
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(
+                    'timer-progress-${_currentSeconds}_${_isBreak ? 1 : 0}',
                   ),
+                  duration: const Duration(milliseconds: 650),
+                  curve: Curves.easeOutCubic,
+                  tween: Tween(
+                    begin: (_progress + tickSize).clamp(0.0, 1.0),
+                    end: _progress.clamp(0.0, 1.0),
+                  ),
+                  builder: (context, value, child) {
+                    return CustomPaint(
+                      painter: _TimerRingPainter(
+                        progress: value,
+                        trackColor: AppTheme.getSurfaceColor(isDark)
+                            .withValues(alpha: 0.5),
+                        tickColor: AppTheme.getTextSecondary(isDark)
+                            .withValues(alpha: 0.18),
+                        gradientColors: ringGradient,
+                        leadingDotColor: phaseColor,
+                        strokeWidth: ringStroke,
+                      ),
+                    );
+                  },
                 ),
               ),
-              Container(
-                width: innerSize,
-                height: innerSize,
-                padding: EdgeInsets.symmetric(
-                  horizontal: innerPadding,
-                  vertical: innerPadding - 2,
-                ),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppTheme.getBackgroundColor(isDark)
-                          .withValues(alpha: 0.95),
-                      AppTheme.getCardColor(isDark).withValues(alpha: 0.7),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: AppTheme.getSurfaceColor(isDark)
-                        .withValues(alpha: 0.34),
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: AnimatedBuilder(
-                        animation: _pulseController,
-                        builder: (context, child) {
-                          return Transform.scale(
-                            scale: _isRunning
-                                ? 1 + (_pulseController.value * 0.014)
-                                : 1,
-                            child: Text(
-                              _formatTime(_currentSeconds),
-                              style: AppTheme.headingLarge.copyWith(
-                                fontSize: timeFontSize,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.getTextPrimary(isDark),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    SizedBox(height: innerSize * 0.1),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        'Cycle ${_completedSessions + (_isBreak ? 1 : 0)} of $_plannedCycles',
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTheme.headingSmall.copyWith(
-                          fontSize: cycleFontSize,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.getTextSecondary(isDark),
+
+              // ── Inner glass core (phase pill + time + cycle counter) ───────
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, _) {
+                  final scale = _isRunning
+                      ? 1 + (_pulseController.value * 0.012)
+                      : 1.0;
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: innerSize,
+                      height: innerSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            AppTheme.getCardColor(isDark)
+                                .withValues(alpha: 0.95),
+                            AppTheme.getBackgroundColor(isDark)
+                                .withValues(alpha: 0.92),
+                          ],
+                          radius: 0.85,
                         ),
+                        border: Border.all(
+                          color: phaseColor.withValues(alpha: 0.18),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.30),
+                            blurRadius: 18,
+                            offset: const Offset(0, 6),
+                            spreadRadius: -2,
+                          ),
+                        ],
+                      ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 420),
+                        switchInCurve: Curves.easeOutBack,
+                        switchOutCurve: Curves.easeIn,
+                        transitionBuilder: (child, anim) => FadeTransition(
+                          opacity: anim,
+                          child: ScaleTransition(scale: anim, child: child),
+                        ),
+                        child: _isCompleteAnimating
+                            ? _buildCompletionContent(
+                                key: const ValueKey('timer-complete'),
+                                innerSize: innerSize,
+                                timeFontSize: timeFontSize,
+                                cycleFontSize: cycleFontSize,
+                              )
+                            : _buildRunningContent(
+                                key: const ValueKey('timer-running'),
+                                isDark: isDark,
+                                phaseColor: phaseColor,
+                                innerSize: innerSize,
+                                timeFontSize: timeFontSize,
+                                cycleFontSize: cycleFontSize,
+                              ),
                       ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  /// Inner content while the timer is running — phase pill, time, cycle.
+  Widget _buildRunningContent({
+    required Key key,
+    required bool isDark,
+    required Color phaseColor,
+    required double innerSize,
+    required double timeFontSize,
+    required double cycleFontSize,
+  }) {
+    return Column(
+      key: key,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Phase pill: FOCUS / BREAK
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: phaseColor.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: phaseColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: phaseColor.withValues(alpha: 0.6),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _isBreak ? 'BREAK' : 'FOCUS',
+                style: TextStyle(
+                  color: phaseColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: innerSize * 0.04),
+        // Time — tabular numerals so digits don't jitter
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            _formatTime(_currentSeconds),
+            style: AppTheme.headingLarge.copyWith(
+              fontSize: timeFontSize,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.getTextPrimary(isDark),
+              height: 1.0,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: -1,
+            ),
+          ),
+        ),
+        SizedBox(height: innerSize * 0.04),
+        // Cycle counter
+        Text(
+          'Cycle ${_completedSessions + (_isBreak ? 1 : 0)} of $_plannedCycles',
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: cycleFontSize,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.getTextSecondary(isDark),
+            letterSpacing: 0.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Inner content during the brief end-of-session celebration — a glowing
+  /// scaled-in green check and a short "Session complete" caption. The
+  /// surrounding ring already animates to 100% via the existing tween.
+  Widget _buildCompletionContent({
+    required Key key,
+    required double innerSize,
+    required double timeFontSize,
+    required double cycleFontSize,
+  }) {
+    final iconSize = innerSize * 0.42;
+    return Column(
+      key: key,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: iconSize,
+          height: iconSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppTheme.success.withValues(alpha: 0.18),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.success.withValues(alpha: 0.55),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.check_rounded,
+            color: AppTheme.success,
+            size: iconSize * 0.66,
+          ),
+        ),
+        SizedBox(height: innerSize * 0.05),
+        Text(
+          'Session complete',
+          style: TextStyle(
+            color: AppTheme.success,
+            fontWeight: FontWeight.w800,
+            fontSize: cycleFontSize + 1,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
     );
   }
 
@@ -3769,34 +4358,55 @@ class _HoverLiftState extends State<_HoverLift> {
 class _TimerRingPainter extends CustomPainter {
   final double progress;
   final Color trackColor;
+  final Color tickColor;
   final List<Color> gradientColors;
+  final Color leadingDotColor;
   final double strokeWidth;
 
   _TimerRingPainter({
     required this.progress,
     required this.trackColor,
+    required this.tickColor,
     required this.gradientColors,
+    required this.leadingDotColor,
     required this.strokeWidth,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(
-      strokeWidth / 2,
-      strokeWidth / 2,
-      size.width - strokeWidth,
-      size.height - strokeWidth,
-    );
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerR = (size.width - strokeWidth) / 2;
+    final rect = Rect.fromCircle(center: center, radius: outerR);
 
+    // ── 1. Track ring (very subtle) ──────────────────────────────────────────
     final trackPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..color = trackColor;
-
     canvas.drawArc(rect, -pi / 2, 2 * pi, false, trackPaint);
+
+    // ── 2. Minute tick marks (12 around the dial) ────────────────────────────
+    const tickCount = 12;
+    final tickPaint = Paint()
+      ..color = tickColor
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    final tickOuter = outerR - strokeWidth * 0.6;
+    final tickInner = tickOuter - strokeWidth * 0.45;
+    for (var i = 0; i < tickCount; i++) {
+      final a = (-pi / 2) + (2 * pi * i / tickCount);
+      final cosA = cos(a);
+      final sinA = sin(a);
+      canvas.drawLine(
+        Offset(center.dx + cosA * tickInner, center.dy + sinA * tickInner),
+        Offset(center.dx + cosA * tickOuter, center.dy + sinA * tickOuter),
+        tickPaint,
+      );
+    }
 
     if (progress <= 0) return;
 
+    // ── 3. Progress arc with sweep gradient and rounded caps ─────────────────
     final progressPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
@@ -3806,13 +4416,28 @@ class _TimerRingPainter extends CustomPainter {
         endAngle: (3 * pi) / 2,
         colors: gradientColors,
       ).createShader(rect);
+    final sweep = (2 * pi * progress).clamp(0.0, 2 * pi);
+    canvas.drawArc(rect, -pi / 2, sweep, false, progressPaint);
 
-    canvas.drawArc(
-      rect,
-      -pi / 2,
-      (2 * pi * progress).clamp(0.0, 2 * pi),
-      false,
-      progressPaint,
+    // ── 4. Glowing leading dot at the progress tip ───────────────────────────
+    final tipAngle = (-pi / 2) + sweep;
+    final tipPos = Offset(
+      center.dx + cos(tipAngle) * outerR,
+      center.dy + sin(tipAngle) * outerR,
+    );
+    // Outer soft glow
+    canvas.drawCircle(
+      tipPos,
+      strokeWidth * 1.1,
+      Paint()
+        ..color = leadingDotColor.withValues(alpha: 0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, strokeWidth * 0.7),
+    );
+    // Bright core
+    canvas.drawCircle(
+      tipPos,
+      strokeWidth * 0.42,
+      Paint()..color = Colors.white.withValues(alpha: 0.95),
     );
   }
 
@@ -3820,7 +4445,9 @@ class _TimerRingPainter extends CustomPainter {
   bool shouldRepaint(covariant _TimerRingPainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.trackColor != trackColor ||
+        oldDelegate.tickColor != tickColor ||
         oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.leadingDotColor != leadingDotColor ||
         oldDelegate.gradientColors != gradientColors;
   }
 }

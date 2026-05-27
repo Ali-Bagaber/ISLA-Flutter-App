@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -v \"core/domain/repositories/analytics_repository.dart\")",
+      "Bash(rm -v \"core/domain/repositories/session_repository.dart\")",
+      "Bash(rm -v \"core/domain/repositories/task_repository.dart\")",
+      "Bash(rm -v \"core/domain/services/service_contracts.dart\")",
+      "Bash(rm -v \"core/domain/models/task.dart\")",
+      "Bash(flutter analyze *)"
+    ]
+  }
+}

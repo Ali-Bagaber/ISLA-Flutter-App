@@ -31,48 +31,82 @@ class GeminiStudyService {
     return DateTime(1970);
   }
 
-  // ── Core request helper ────────────────────────────────────────────────────
+  // ── Core request helper — Gemini → Groq → OpenRouter ───────────────────────
 
-  Future<String> _ask(String prompt,
-      {int retryCount = 0, void Function()? onRetrying}) async {
-    if (!AppConfig.hasGeminiKey) {
-      throw StateError('Gemini API key is not configured in secrets.dart');
-    }
-    Map<String, dynamic>? responseData;
-    try {
-      final response = await _dio.post<Map<String, dynamic>>(
-        _endpoint,
-        queryParameters: {'key': AppConfig.geminiApiKey},
-        data: {
-          'contents': [
-            {
-              'role': 'user',
-              'parts': [
-                {'text': prompt}
-              ]
-            }
-          ],
-          'generationConfig': {'temperature': 0.4, 'maxOutputTokens': 512},
-        },
-        options: Options(
-          sendTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
-        ),
-      );
-      responseData = response.data;
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 429 && retryCount < 3) {
-        // Rate limited — notify UI, wait then retry silently (up to 3 times)
+  Future<String> _ask(String prompt, {void Function()? onRetrying}) async {
+    // ── 1. Gemini ────────────────────────────────────────────────────────────
+    if (AppConfig.hasGeminiKey) {
+      try {
+        return await _callGemini(prompt);
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        // Auth errors → key is broken, don't try further providers
+        if (code == 401 || code == 403) {
+          throw StateError('Gemini API key invalid or restricted.');
+        }
+        // 429, network, or anything else → notify UI and try Groq
         onRetrying?.call();
-        // Wait longer each retry: 5s, 10s, 20s
-        final waitSeconds = [5, 10, 20][retryCount];
-        await Future.delayed(Duration(seconds: waitSeconds));
-        return _ask(prompt, retryCount: retryCount + 1, onRetrying: onRetrying);
+      } on StateError {
+        onRetrying?.call();
       }
-      throw StateError(_friendlyApiError(e));
     }
 
-    final candidates = responseData?['candidates'];
+    // ── 2. Groq ──────────────────────────────────────────────────────────────
+    if (AppConfig.hasGroqKey) {
+      try {
+        return await _callOpenAiCompatible(
+          endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+          model: AppConfig.groqModel,
+          apiKey: AppConfig.groqApiKey,
+          prompt: prompt,
+        );
+      } catch (_) {
+        // Fall through to OpenRouter
+      }
+    }
+
+    // ── 3. OpenRouter ────────────────────────────────────────────────────────
+    if (AppConfig.hasOpenRouterKey) {
+      try {
+        return await _callOpenAiCompatible(
+          endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+          model: AppConfig.openRouterModel,
+          apiKey: AppConfig.openRouterApiKey,
+          prompt: prompt,
+          extraHeaders: {'HTTP-Referer': 'https://isla.app'},
+        );
+      } catch (_) {
+        // Fall through
+      }
+    }
+
+    throw StateError(
+      'All AI providers (Gemini, Groq, OpenRouter) are unavailable or quota-limited.',
+    );
+  }
+
+  Future<String> _callGemini(String prompt) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      _endpoint,
+      queryParameters: {'key': AppConfig.geminiApiKey},
+      data: {
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': prompt}
+            ]
+          }
+        ],
+        'generationConfig': {'temperature': 0.4, 'maxOutputTokens': 1024},
+      },
+      options: Options(
+        sendTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 20),
+      ),
+    );
+
+    final candidates = response.data?['candidates'];
     if (candidates is List && candidates.isNotEmpty) {
       final parts = candidates.first['content']?['parts'];
       if (parts is List && parts.isNotEmpty) {
@@ -83,57 +117,87 @@ class GeminiStudyService {
     throw StateError('Empty response from Gemini API');
   }
 
-  String _friendlyApiError(DioException e) {
-    final statusCode = e.response?.statusCode;
-    final apiError = _extractApiError(e.response?.data);
+  Future<String> _callOpenAiCompatible({
+    required String endpoint,
+    required String model,
+    required String apiKey,
+    required String prompt,
+    Map<String, String> extraHeaders = const {},
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      endpoint,
+      data: {
+        'model': model,
+        'messages': [
+          {'role': 'user', 'content': prompt}
+        ],
+        'temperature': 0.4,
+        'max_tokens': 1024,
+      },
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+          ...extraHeaders,
+        },
+        sendTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 20),
+      ),
+    );
 
-    if (statusCode == 429) {
-      return 'AI is temporarily busy. Please tap Try Again in a few seconds.';
-    }
-    if (statusCode == 401 || statusCode == 403) {
-      return 'Gemini API key is invalid or blocked by restrictions.';
-    }
-    if (statusCode == 404) {
-      return 'Gemini model not found. Update model in app config.';
-    }
-    if (apiError != null && apiError.isNotEmpty) {
-      return apiError;
-    }
-
-    return 'Network error while contacting Gemini API.';
-  }
-
-  String? _extractApiError(dynamic responseData) {
-    if (responseData is Map<String, dynamic>) {
-      final error = responseData['error'];
-      if (error is Map<String, dynamic>) {
-        final message = error['message'];
-        if (message is String) {
-          return message;
-        }
+    final choices = response.data?['choices'];
+    if (choices is List && choices.isNotEmpty) {
+      final message = choices.first['message'];
+      if (message is Map) {
+        final content = message['content'];
+        if (content is String) return content;
       }
     }
-    return null;
+    throw StateError('Empty response from AI provider.');
+  }
+
+  /// Trim long document content to keep request payload reasonable.
+  String _trimForPrompt(String text, {int maxChars = 12000}) {
+    final t = text.trim();
+    if (t.length <= maxChars) return t;
+    return '${t.substring(0, maxChars)}\n\n[...content truncated...]';
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────
 
+  /// Summary output style.
+  ///   - bullets   : 5-point numbered list (default; quick scanning).
+  ///   - paragraph : 2–3 detailed paragraphs explaining the material.
+  ///
+  /// Both styles are kept short enough to stay well under token limits.
   Future<String> generateSummary({
     required String title,
     required String subject,
+    String documentText = '',
+    String mode = 'bullets',
     void Function()? onRetrying,
   }) async {
-    final prompt =
-        'Summarize the document "$title" ($subject) for a university student. Give 5 key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1."';
-    try {
-      return await _ask(prompt, onRetrying: onRetrying);
-    } catch (_) {
-      return '1. $title is a key topic in $subject that covers foundational concepts and principles.\n'
-          '2. Understanding this subject requires familiarity with core definitions, frameworks, and methodologies.\n'
-          '3. The main themes include theoretical foundations, practical applications, and real-world case studies.\n'
-          '4. Key skills developed include analytical thinking, problem-solving, and applying knowledge to new scenarios.\n'
-          '5. Reviewing this document will help consolidate understanding and prepare for assessments in $subject.';
+    final hasText = documentText.trim().isNotEmpty;
+    final wantParagraph = mode.toLowerCase() == 'paragraph';
+
+    final String prompt;
+    if (wantParagraph) {
+      prompt = hasText
+          ? 'Summarize the following study material in clear paragraphs for a university student. '
+              'Write 2 to 3 detailed but concise paragraphs covering the main ideas, important '
+              'explanations and key concepts. Use simple academic language. Do not use bullet '
+              'points or headings. Keep the whole answer under ~280 words.\n\n'
+              'Document title: "$title"\nSubject: $subject\n\n'
+              'Content:\n${_trimForPrompt(documentText)}'
+          : 'Write a clear 2–3 paragraph summary of "$title" ($subject) for a university student, '
+              'covering the main ideas, important explanations and key concepts in simple academic '
+              'language. Do not use bullet points. Keep the whole answer under ~280 words.';
+    } else {
+      prompt = hasText
+          ? 'Summarize the following document for a university student. Give 5 key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1.".\n\nDocument title: "$title"\nSubject: $subject\n\nContent:\n${_trimForPrompt(documentText)}'
+          : 'Summarize the document "$title" ($subject) for a university student. Give 5 key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1."';
     }
+    return await _ask(prompt, onRetrying: onRetrying);
   }
 
   // ── Flashcards ─────────────────────────────────────────────────────────────
@@ -144,115 +208,47 @@ class GeminiStudyService {
     required String subject,
     required int index,
     required int total,
+    String documentText = '',
   }) async {
-    final prompt =
-        'Create flashcard ${index + 1} of $total for "$title" ($subject). '
-        'Return ONLY a JSON object with "question" and "answer" keys. '
-        'Answer: 1-2 sentences. No markdown. Example: {"question":"...","answer":"..."}';
-    final _fallbacks = [
-      {
-        'question': 'What is the main topic of "$title"?',
-        'answer': 'It covers key concepts and principles in $subject.'
-      },
-      {
-        'question': 'What subject does "$title" belong to?',
-        'answer': 'It belongs to $subject.'
-      },
-      {
-        'question': 'Why is $subject important?',
-        'answer':
-            '$subject provides foundational knowledge and practical skills.'
-      },
-      {
-        'question': 'What are the core themes in $subject?',
-        'answer': 'Theory, application, analysis, and problem-solving.'
-      },
-      {
-        'question': 'How should you study "$title"?',
-        'answer':
-            'Read actively, take notes, and test yourself on key concepts.'
-      },
-      {
-        'question': 'What skills does $subject develop?',
-        'answer':
-            'Critical thinking, analytical reasoning, and applied knowledge.'
-      },
-      {
-        'question': 'How does "$title" relate to real-world use?',
-        'answer': 'It applies concepts to practical scenarios in $subject.'
-      },
-      {
-        'question': 'What is the best way to review $subject material?',
-        'answer':
-            'Summarise key points, use flashcards, and practice with past questions.'
-      },
-    ];
-    try {
-      final raw = await _ask(prompt);
-      var cleaned =
-          raw.trim().replaceAll('```json', '').replaceAll('```', '').trim();
-      final start = cleaned.indexOf('{');
-      final end = cleaned.lastIndexOf('}');
-      if (start != -1 && end != -1) cleaned = cleaned.substring(start, end + 1);
-      final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
-      final q = (decoded['question'] ?? '').toString();
-      final a = (decoded['answer'] ?? '').toString();
-      if (q.isNotEmpty && a.isNotEmpty) return {'question': q, 'answer': a};
-    } catch (_) {}
-    return _fallbacks[index % _fallbacks.length];
+    final hasText = documentText.trim().isNotEmpty;
+    final prompt = hasText
+        ? 'Create flashcard ${index + 1} of $total based on the following document.\n\n'
+            'Title: "$title"\nSubject: $subject\n\n'
+            'Content:\n${_trimForPrompt(documentText)}\n\n'
+            'Return ONLY a JSON object with "question" and "answer" keys. '
+            'Answer: 1-2 sentences. No markdown. Example: {"question":"...","answer":"..."}'
+        : 'Create flashcard ${index + 1} of $total for "$title" ($subject). '
+            'Return ONLY a JSON object with "question" and "answer" keys. '
+            'Answer: 1-2 sentences. No markdown. Example: {"question":"...","answer":"..."}';
+    final raw = await _ask(prompt);
+    var cleaned =
+        raw.trim().replaceAll('```json', '').replaceAll('```', '').trim();
+    final start = cleaned.indexOf('{');
+    final end = cleaned.lastIndexOf('}');
+    if (start != -1 && end != -1) cleaned = cleaned.substring(start, end + 1);
+    final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
+    final q = (decoded['question'] ?? '').toString();
+    final a = (decoded['answer'] ?? '').toString();
+    if (q.isNotEmpty && a.isNotEmpty) return {'question': q, 'answer': a};
+    throw StateError('Invalid flashcard response from AI.');
   }
 
   Future<List<Map<String, String>>> generateFlashcards({
     required String title,
     required String subject,
     int count = 8,
+    String documentText = '',
     void Function()? onRetrying,
   }) async {
-    final prompt =
-        'Create $count flashcards for "$title" ($subject). Return ONLY a JSON array with "question" and "answer" keys. Answers: 1-2 sentences. No markdown.';
-    try {
-      final raw = await _ask(prompt, onRetrying: onRetrying);
-      return _parseFlashcards(raw);
-    } catch (_) {
-      return [
-        {
-          'question': 'What is the main topic of "$title"?',
-          'answer': 'It covers key concepts and principles in $subject.'
-        },
-        {
-          'question': 'What subject does "$title" belong to?',
-          'answer': 'It belongs to $subject.'
-        },
-        {
-          'question': 'Why is $subject important?',
-          'answer':
-              '$subject provides foundational knowledge and practical skills.'
-        },
-        {
-          'question': 'What are the core themes in $subject?',
-          'answer': 'Theory, application, analysis, and problem-solving.'
-        },
-        {
-          'question': 'How should you study "$title"?',
-          'answer':
-              'Read actively, take notes, and test yourself on key concepts.'
-        },
-        {
-          'question': 'What skills does $subject develop?',
-          'answer':
-              'Critical thinking, analytical reasoning, and applied knowledge.'
-        },
-        {
-          'question': 'How does "$title" relate to real-world use?',
-          'answer': 'It applies concepts to practical scenarios in $subject.'
-        },
-        {
-          'question': 'What is the best way to review $subject material?',
-          'answer':
-              'Summarise key points, use flashcards, and practice with past questions.'
-        },
-      ].take(count).toList();
-    }
+    final hasText = documentText.trim().isNotEmpty;
+    final prompt = hasText
+        ? 'Create $count flashcards based on the following document.\n\n'
+            'Title: "$title"\nSubject: $subject\n\n'
+            'Content:\n${_trimForPrompt(documentText)}\n\n'
+            'Return ONLY a JSON array with "question" and "answer" keys. Answers: 1-2 sentences. No markdown.'
+        : 'Create $count flashcards for "$title" ($subject). Return ONLY a JSON array with "question" and "answer" keys. Answers: 1-2 sentences. No markdown.';
+    final raw = await _ask(prompt, onRetrying: onRetrying);
+    return _parseFlashcards(raw);
   }
 
   List<Map<String, String>> _parseFlashcards(String raw) {
@@ -290,67 +286,18 @@ class GeminiStudyService {
     required String title,
     required String subject,
     int count = 5,
+    String documentText = '',
     void Function()? onRetrying,
   }) async {
-    final prompt =
-        'Create $count MCQ questions for "$title" ($subject). Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index). No markdown.';
-    try {
-      final raw = await _ask(prompt, onRetrying: onRetrying);
-      return _parseQuiz(raw);
-    } catch (_) {
-      return [
-        {
-          'question': 'What is the primary focus of "$title"?',
-          'options': [
-            'Core concepts of $subject',
-            'Historical events',
-            'Mathematical formulas',
-            'Programming languages'
-          ],
-          'correct': 0
-        },
-        {
-          'question': 'Which skill does studying $subject develop?',
-          'options': [
-            'Memorisation only',
-            'Critical thinking and analysis',
-            'Physical coordination',
-            'Language translation'
-          ],
-          'correct': 1
-        },
-        {
-          'question': 'What is the best approach to understanding $subject?',
-          'options': [
-            'Skip the theory',
-            'Read once quickly',
-            'Study concepts with examples',
-            'Focus only on definitions'
-          ],
-          'correct': 2
-        },
-        {
-          'question': 'How is $subject applied in practice?',
-          'options': [
-            'It has no real-world use',
-            'Only in research labs',
-            'Through problem-solving and case studies',
-            'Only in exams'
-          ],
-          'correct': 2
-        },
-        {
-          'question': 'What should you do when reviewing "$title"?',
-          'options': [
-            'Ignore key terms',
-            'Take structured notes and test yourself',
-            'Read passively',
-            'Skip difficult sections'
-          ],
-          'correct': 1
-        },
-      ].take(count).toList();
-    }
+    final hasText = documentText.trim().isNotEmpty;
+    final prompt = hasText
+        ? 'Create $count MCQ questions based on the following document.\n\n'
+            'Title: "$title"\nSubject: $subject\n\n'
+            'Content:\n${_trimForPrompt(documentText)}\n\n'
+            'Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index). No markdown.'
+        : 'Create $count MCQ questions for "$title" ($subject). Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index). No markdown.';
+    final raw = await _ask(prompt, onRetrying: onRetrying);
+    return _parseQuiz(raw);
   }
 
   List<Map<String, dynamic>> _parseQuiz(String raw) {
@@ -629,6 +576,8 @@ class GeminiStudyService {
     String? subject,
     int? checklistDone,
     int? checklistTotal,
+    int verifiedCorrect = 0,
+    int verifiedTotal = 0,
   }) async {
     final db = _db;
     final userId = _userId;
@@ -636,9 +585,26 @@ class GeminiStudyService {
 
     final done = checklistDone ?? 0;
     final total = checklistTotal ?? 0;
-    final ratio = total > 0 ? (done / total).clamp(0.0, 1.0) : 0.6;
+
+    // Session score (0–100). Transparent formula:
+    //   Base                                10
+    //   Cycles completed (×10, cap at 4)    0–40
+    //   Checklist completion %              0–20
+    //   Verification correctness %          0–30
+    // Skipping the Quick Check yields 0 for the verification slice — so users
+    // who actually demonstrate retention earn a meaningfully higher score.
+    final cycleScore = (min(cycles, 4) * 10);
+    final checklistRatio = total > 0
+        ? (done / total).clamp(0.0, 1.0)
+        : 0.0;
+    final checklistScore = (checklistRatio * 20).round();
+    final verifyRatio = verifiedTotal > 0
+        ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0)
+        : 0.0;
+    final verifyScore = (verifyRatio * 30).round();
     final focusScore =
-        (62 + (ratio * 24).round() + (min(cycles, 4) * 3)).clamp(55, 99);
+        (10 + cycleScore + checklistScore + verifyScore).clamp(0, 100);
+
     final safeSubject = (subject == null || subject.trim().isEmpty)
         ? 'Other Tasks'
         : subject.trim();
@@ -651,6 +617,8 @@ class GeminiStudyService {
       'subject': safeSubject,
       'checklistDone': done,
       'checklistTotal': total,
+      'verifiedCorrect': verifiedCorrect,
+      'verifiedTotal': verifiedTotal,
       'duration': focusMinutes,
       'actualMinutes': focusMinutes,
       'plannedMinutes': focusMinutes,
@@ -675,6 +643,8 @@ class GeminiStudyService {
       'interruptionsCount': 0,
       'checklistDone': done,
       'checklistTotal': total,
+      'verifiedCorrect': verifiedCorrect,
+      'verifiedTotal': verifiedTotal,
       'focusScore': focusScore,
       'completed': true,
       'createdAt': FieldValue.serverTimestamp(),

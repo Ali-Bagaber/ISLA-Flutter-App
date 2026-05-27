@@ -19,6 +19,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
   String _summary = '';
   String? _error;
   String _loadingMessage = 'AI is analyzing your document';
+  /// 'bullets' (5 key points) or 'paragraph' (detailed 2–3 paragraphs).
+  String _mode = 'bullets';
   final _service = GeminiStudyService();
 
   @override
@@ -37,6 +39,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final result = await _service.generateSummary(
         title: widget.document['title'] ?? 'Unknown Document',
         subject: widget.document['subject'] ?? 'General',
+        mode: _mode,
+        documentText: (widget.document['extractedText'] ??
+                widget.document['notes'] ??
+                widget.document['content'] ??
+                widget.document['description'] ??
+                '')
+            .toString(),
         onRetrying: () {
           if (mounted)
             setState(() => _loadingMessage =
@@ -201,6 +210,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
                         const SizedBox(height: 24),
 
+                        // Mode toggle — Bullets (5 key points) vs Paragraph (detailed)
+                        _SummaryModeToggle(
+                          mode: _mode,
+                          isDark: isDark,
+                          onChanged: (next) {
+                            if (next == _mode) return;
+                            setState(() => _mode = next);
+                            _generate();
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+
                         // Summary Content
                         Container(
                           padding: const EdgeInsets.all(20),
@@ -238,6 +260,87 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       ],
                     ),
                   ),
+      ),
+    );
+  }
+}
+
+/// Pill toggle between "Bullets" (5-point summary) and "Paragraph"
+/// (detailed prose summary). Sits above the summary card.
+class _SummaryModeToggle extends StatelessWidget {
+  final String mode;
+  final bool isDark;
+  final ValueChanged<String> onChanged;
+
+  const _SummaryModeToggle({
+    required this.mode,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = AppTheme.getSurfaceColor(isDark);
+
+    Widget tab(String value, IconData icon, String label) {
+      final selected = mode == value;
+      return Expanded(
+        child: InkWell(
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.circular(999),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppTheme.primaryColor.withValues(alpha: 0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected
+                    ? AppTheme.primaryColor
+                    : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: 16,
+                    color: selected
+                        ? AppTheme.primaryColor
+                        : AppTheme.getTextSecondary(isDark)),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? AppTheme.primaryColor
+                        : AppTheme.getTextSecondary(isDark),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        children: [
+          tab('bullets', Icons.format_list_numbered_rounded, 'Bullets'),
+          tab('paragraph', Icons.notes_rounded, 'Paragraph'),
+        ],
       ),
     );
   }

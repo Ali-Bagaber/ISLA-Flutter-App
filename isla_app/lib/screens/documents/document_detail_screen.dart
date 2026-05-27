@@ -141,6 +141,8 @@ class DocumentDetailScreen extends StatelessWidget {
                           builder: (_) => DocumentAnnotateScreen(
                             documentTitle:
                                 document['title'] as String? ?? 'Document',
+                            documentId: (document['id'] ??
+                                document['documentId']) as String?,
                             downloadUrl: (document['fileUrl'] ??
                                 document['downloadUrl']) as String?,
                             fileType: document['type'] as String? ?? 'PDF',

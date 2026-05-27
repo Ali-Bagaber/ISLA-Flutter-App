@@ -12,59 +12,41 @@ class IslaLogo extends StatelessWidget {
 
   const IslaLogo({
     super.key,
-    this.markSize = 16,
-    this.textSize = 18,
+    this.markSize = 28,
+    this.textSize = 17,
     this.showText = true,
     this.mainAxisSize = MainAxisSize.min,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = AppTheme.primaryColor;
-    final ringColor = primary.withValues(alpha: isDark ? 0.42 : 0.36);
-    final dotColor = isDark ? AppTheme.primaryLight : const Color(0xFF7EDDF0);
-
     return Row(
       mainAxisSize: mainAxisSize,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
+        Image.asset(
+          'assets/images/isla_logo_512.png',
           width: markSize,
           height: markSize,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: markSize,
-                height: markSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: ringColor,
-                    width: (markSize * 0.08).clamp(1.2, 2.2),
-                  ),
-                ),
-              ),
-              Container(
-                width: markSize * 0.42,
-                height: markSize * 0.42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: dotColor,
-                ),
-              ),
-            ],
-          ),
+          fit: BoxFit.contain,
         ),
         if (showText) ...[
-          const SizedBox(width: 10),
-          Text(
-            'ISLA',
-            style: TextStyle(
-              color: primary,
-              fontSize: textSize,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
+          const SizedBox(width: 8),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Color(0xFF81ECFF), Color(0xFF4A90D9)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ).createShader(bounds),
+            child: Text(
+              'ISLA',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: textSize,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: Colors.white,
+              ),
             ),
           ),
         ],

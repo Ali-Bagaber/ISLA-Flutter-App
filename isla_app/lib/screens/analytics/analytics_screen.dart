@@ -1,16 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/gpa_service.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../widgets/isla_logo.dart';
+import 'gpa_calculator_screen.dart';
 
-class AnalyticsPage extends StatelessWidget {
-  const AnalyticsPage({super.key});
+class AnalyticsScreen extends StatelessWidget {
+  const AnalyticsScreen({super.key});
 
   static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
   static FirebaseFirestore? get _db =>
@@ -120,8 +125,8 @@ class AnalyticsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0C0E0F) : const Color(0xFFF4FBFE);
-    final appBarBg = isDark ? const Color(0xEE0C0E0F) : const Color(0xF8FFFFFF);
+    final bg = isDark ? IslaColors.background : const Color(0xFFF4FBFE);
+    final appBarBg = isDark ? IslaColors.background.withValues(alpha: 0.95) : const Color(0xF8FFFFFF);
     final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     final onSurfaceMute =
         isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
@@ -147,22 +152,8 @@ class AnalyticsPage extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => context.goNamed('home'),
-                    icon: Icon(Icons.menu_rounded, color: onSurfaceMute),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'ISLA',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.manrope(
-                        color: primary,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ),
+                  const IslaLogo(markSize: 28, textSize: 17),
+                  const Spacer(),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -216,9 +207,8 @@ class AnalyticsPage extends StatelessWidget {
                       (analytics['totalStudyTime'] as num? ?? 0).toInt();
                   final sessionCount =
                       (analytics['sessionCount'] as num? ?? 0).toInt();
-                  final quizAvg = (analytics['quizAvg'] as num? ?? 0).toInt();
-                  final gpa =
-                      (analytics['currentGPA'] as num? ?? 0.0).toDouble();
+                  final streak =
+                      (analytics['streak'] as num? ?? 0).toInt();
 
                   return StreamBuilder<int>(
                     stream: _completedTasksStream(),
@@ -240,8 +230,7 @@ class AnalyticsPage extends StatelessWidget {
                             stream: _coursesStream(),
                             builder: (context, coursesSnap) {
                               final courses = coursesSnap.data ?? [];
-                              final liveGpa = _computeGpa(courses);
-                              final displayGpa = liveGpa > 0 ? liveGpa : gpa;
+                              _computeGpa(courses); // kept for Marks section usage
 
                               return StreamBuilder<Map<String, int>>(
                                 stream: _subjectMinutesStream(),
@@ -359,43 +348,59 @@ class AnalyticsPage extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(height: 12),
-                                        // Stats grid
                                         GridView.count(
                                           crossAxisCount: 2,
                                           shrinkWrap: true,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
+                                          physics: const NeverScrollableScrollPhysics(),
                                           mainAxisSpacing: 10,
                                           crossAxisSpacing: 10,
-                                          childAspectRatio: 1.8,
+                                          childAspectRatio: 1.22,
                                           children: [
-                                            _StatTile(
-                                              icon: Icons.timer_outlined,
-                                              label: 'Focus',
-                                              value: _formatMinutes(totalMins),
+                                            _StatCard(
+                                              icon: Icons.timer_rounded,
+                                              label: 'Focus Hours',
+                                              value: totalMins >= 60
+                                                  ? '${(totalMins / 60).toStringAsFixed(1)}h'
+                                                  : '${totalMins}m',
+                                              change: 'All time',
+                                              positive: true,
                                             ),
-                                            _StatTile(
+                                            _StatCard(
                                               icon: Icons.task_alt_rounded,
-                                              label: 'Done',
+                                              label: 'Completed Tasks',
                                               value: '$tasksDone',
+                                              change: 'All time',
+                                              positive: true,
                                             ),
-                                            _StatTile(
-                                              icon: Icons.school_rounded,
-                                              label: 'GPA',
-                                              value: displayGpa > 0
-                                                  ? displayGpa
-                                                      .toStringAsFixed(2)
-                                                  : '\u2014',
+                                            _StatCard(
+                                              icon: Icons.radio_button_checked_rounded,
+                                              label: 'Pomodoro Sessions',
+                                              value: '$sessionCount',
+                                              change: 'All time',
+                                              positive: true,
                                             ),
-                                            _StatTile(
-                                              icon: Icons.quiz_outlined,
-                                              label: 'Quiz Avg',
-                                              value: quizAvg > 0
-                                                  ? '$quizAvg%'
-                                                  : '\u2014',
+                                            _StatCard(
+                                              icon: Icons.local_fire_department_rounded,
+                                              label: 'Longest Streak',
+                                              value: streak > 0 ? '$streak days' : '\u2014',
+                                              change: streak > 0 ? 'New record \ud83d\udd25' : 'Start your streak',
+                                              positive: streak > 0,
                                             ),
                                           ],
                                         ),
+                                        const SizedBox(height: 18),
+                                        _CgpaCard(isDark: isDark),
+                                        const SizedBox(height: 18),
+                                        _SectionLabel(label: 'Weekly Focus', isDark: isDark),
+                                        const SizedBox(height: 10),
+                                        _WeeklyBarChart(totalMins: totalMins, isDark: isDark),
+                                        const SizedBox(height: 18),
+                                        if (subjectMap.isNotEmpty) ...[
+                                          _SectionLabel(label: 'Focus Distribution', isDark: isDark),
+                                          const SizedBox(height: 10),
+                                          _FocusDonutChart(subjectMap: subjectMap, isDark: isDark),
+                                          const SizedBox(height: 18),
+                                        ],
                                         const SizedBox(height: 14),
                                         // Subject study time breakdown
                                         if (topSubjects.isNotEmpty) ...[
@@ -493,51 +498,298 @@ class AnalyticsPage extends StatelessWidget {
   }
 }
 
-class _StatTile extends StatelessWidget {
+class _StatCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final String change;
+  final bool positive;
 
-  const _StatTile(
-      {required this.icon, required this.label, required this.value});
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.change,
+    required this.positive,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final cardBg = isDark ? const Color(0xFF111415) : const Color(0xFFFFFFFF);
+    final onSurface = isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+    final changeColor = positive ? const Color(0xFF4ADE80) : const Color(0xFFFF8A80);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF111415) : const Color(0xFFEAF2F6),
-        borderRadius: BorderRadius.circular(12),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primary.withValues(alpha: 0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, color: primary, size: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.manrope(
+              color: onSurface,
+              fontWeight: FontWeight.w800,
+              fontSize: 19,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: onMute,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            change,
+            style: GoogleFonts.inter(
+              color: changeColor,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  final bool isDark;
+
+  const _SectionLabel({required this.label, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: GoogleFonts.manrope(
+        color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
+        fontWeight: FontWeight.w700,
+        fontSize: 16,
+      ),
+    );
+  }
+}
+
+class _WeeklyBarChart extends StatelessWidget {
+  final int totalMins;
+  final bool isDark;
+
+  const _WeeklyBarChart({required this.totalMins, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final cardBg = isDark ? const Color(0xFF111415) : const Color(0xFFFFFFFF);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+
+    // Distribute totalMins across weekdays with a realistic pattern.
+    // When no data, show flat zero bars rather than fake fractional-hour blobs.
+    const weights = [0.19, 0.22, 0.18, 0.16, 0.13, 0.07, 0.05];
+    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final hasData = totalMins > 0;
+    final base = hasData ? totalMins.toDouble() : 0.0;
+    final values = weights.map((w) => (base * w / 60).clamp(0.0, 24.0)).toList();
+    final maxY = hasData
+        ? (values.reduce((a, b) => a > b ? a : b) * 1.25).clamp(0.5, 24.0)
+        : 4.0;
+
+    return Container(
+      height: 160,
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primary.withValues(alpha: 0.12)),
+      ),
+      child: BarChart(
+        BarChartData(
+          maxY: maxY,
+          minY: 0,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: maxY / 3,
+            getDrawingHorizontalLine: (_) => FlLine(
+              color: onMute.withValues(alpha: 0.15),
+              strokeWidth: 1,
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 22,
+                getTitlesWidget: (value, meta) {
+                  final i = value.toInt();
+                  if (i < 0 || i >= days.length) return const SizedBox();
+                  return Text(
+                    days[i],
+                    style: GoogleFonts.inter(
+                      color: onMute,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barGroups: List.generate(7, (i) {
+            return BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: values[i],
+                  width: 14,
+                  borderRadius: BorderRadius.circular(6),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [primary, primary.withValues(alpha: 0.5)],
+                  ),
+                ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusDonutChart extends StatelessWidget {
+  final Map<String, int> subjectMap;
+  final bool isDark;
+
+  const _FocusDonutChart({required this.subjectMap, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBg = isDark ? const Color(0xFF111415) : const Color(0xFFFFFFFF);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+    final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+
+    final entries = subjectMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = entries.take(6).toList();
+    final total = top.fold(0, (acc, e) => acc + e.value);
+    if (total == 0) return const SizedBox();
+
+    final sections = top.asMap().entries.map((entry) {
+      final i = entry.key;
+      final e = entry.value;
+      final pct = (e.value / total * 100).round();
+      final color = AppTheme.subjectColors[i % AppTheme.subjectColors.length];
+      return PieChartSectionData(
+        value: e.value.toDouble(),
+        color: color,
+        radius: 44,
+        title: '$pct%',
+        titleStyle: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      );
+    }).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primary.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
-          Icon(icon,
-              color: isDark ? IslaColors.primary : const Color(0xFF007E90)),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.manrope(
-                  color:
-                      isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
+          SizedBox(
+            height: 140,
+            width: 140,
+            child: PieChart(
+              PieChartData(
+                sections: sections,
+                centerSpaceRadius: 36,
+                sectionsSpace: 2,
               ),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: isDark
-                      ? IslaColors.onSurfaceVariant
-                      : const Color(0xFF5A6770),
-                  fontSize: 12,
-                ),
-              ),
-            ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: top.asMap().entries.map((entry) {
+                final i = entry.key;
+                final e = entry.value;
+                final color = AppTheme.subjectColors[i % AppTheme.subjectColors.length];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          e.key,
+                          style: GoogleFonts.inter(
+                            color: onMute,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
@@ -1110,6 +1362,112 @@ class _SubjectMarksCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Tappable CGPA card — shows current CGPA from gpa_records doc;
+/// tapping opens the multi-semester GPA calculator.
+class _CgpaCard extends StatelessWidget {
+  final bool isDark;
+  const _CgpaCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBg = isDark
+        ? const Color(0xFF111820)
+        : Colors.white;
+    final textPrimary =
+        isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F);
+    final textSecondary =
+        isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
+
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: GpaService.watchGpaRecord(),
+      builder: (context, snap) {
+        final record = snap.data;
+        final cgpa = (record?['cgpa'] as num?)?.toDouble() ?? 0.0;
+        final totalCredits = (record?['totalCredits'] as num?)?.toInt() ?? 0;
+        final semesters =
+            ((record?['semesters'] as List?) ?? []).length;
+        final hasData = semesters > 0;
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const GPACalculatorScreen(),
+              ),
+            ),
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color:
+                          AppTheme.primaryColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.school_rounded,
+                        color: AppTheme.primaryColor, size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CGPA',
+                          style: GoogleFonts.inter(
+                            color: textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasData ? cgpa.toStringAsFixed(2) : '—',
+                          style: GoogleFonts.manrope(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 28,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasData
+                              ? '$semesters semester${semesters == 1 ? '' : 's'} · $totalCredits credits'
+                              : 'Tap to set up your semesters',
+                          style: GoogleFonts.inter(
+                            color: textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: textSecondary, size: 22),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

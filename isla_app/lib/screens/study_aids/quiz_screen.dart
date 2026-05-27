@@ -55,6 +55,12 @@ class _QuizScreenState extends State<QuizScreen> {
         title: widget.document['title'] ?? 'Unknown Document',
         subject: widget.document['subject'] ?? 'General',
         count: 5,
+        documentText: (widget.document['extractedText'] ??
+                widget.document['notes'] ??
+                widget.document['content'] ??
+                widget.document['description'] ??
+                '')
+            .toString(),
         onRetrying: () {
           if (mounted) {
             setState(() => _loadingMessage =

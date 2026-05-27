@@ -13,6 +13,7 @@ class AddTaskScreen extends StatefulWidget {
   final String? initialType;
   final String? initialPriority;
   final DateTime? initialDueDate;
+  final int? initialEstimatedMinutes;
 
   const AddTaskScreen({
     super.key,
@@ -23,6 +24,7 @@ class AddTaskScreen extends StatefulWidget {
     this.initialType,
     this.initialPriority,
     this.initialDueDate,
+    this.initialEstimatedMinutes,
   });
 
   @override
@@ -41,6 +43,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   TimeOfDay _selectedTime = const TimeOfDay(hour: 23, minute: 59);
   bool _setReminder = true;
   bool _isSaving = false;
+  int _estimatedMinutes = 45;
 
   @override
   void initState() {
@@ -51,12 +54,15 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       _selectedSubject = widget.initialSubject;
       _selectedType = widget.initialType ?? 'Assignment';
       _selectedPriority = widget.initialPriority ?? 'Medium';
+      _estimatedMinutes = widget.initialEstimatedMinutes ?? 45;
       if (widget.initialDueDate != null) {
         _selectedDate = widget.initialDueDate!;
         _selectedTime = TimeOfDay.fromDateTime(widget.initialDueDate!);
       }
     }
   }
+
+  static const List<int> _minutesOptions = [15, 30, 45, 60, 90, 120];
 
   final List<String> _taskTypes = [
     'Assignment',
@@ -116,6 +122,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           type: _selectedType,
           priority: _selectedPriority,
           description: _descriptionController.text.trim(),
+          estimatedMinutes: _estimatedMinutes,
         ).timeout(const Duration(seconds: 20));
       } else {
         await TaskService.addTask(
@@ -125,6 +132,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           type: _selectedType,
           priority: _selectedPriority,
           description: _descriptionController.text.trim(),
+          estimatedMinutes: _estimatedMinutes,
         ).timeout(const Duration(seconds: 20));
       }
 
@@ -397,6 +405,50 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
                 const SizedBox(height: 20),
 
+                // Estimated minutes
+                Text('Estimated minutes', style: AppTheme.labelMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _minutesOptions.map((m) {
+                    final selected = _estimatedMinutes == m;
+                    return InkWell(
+                      onTap: () => setState(() => _estimatedMinutes = m),
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppTheme.primaryColor.withValues(alpha: 0.15)
+                              : surface,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: selected
+                                ? AppTheme.primaryColor
+                                : surface,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          '$m min',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: selected
+                                ? AppTheme.primaryColor
+                                : textSecondary,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 20),
+
                 // Description
                 Text('Description (Optional)', style: AppTheme.labelMedium),
                 const SizedBox(height: 8),
@@ -480,9 +532,9 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                                   AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Text(
-                            'Add Task',
-                            style: TextStyle(
+                        : Text(
+                            widget.taskId != null ? 'Save Changes' : 'Add Task',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),

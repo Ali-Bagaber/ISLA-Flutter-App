@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
 class IslaColors {
-  // Core
-  static const background = Color(0xFF0C0E0F);
-  static const surface = Color(0xFF0C0E0F);
-  static const surfaceDim = Color(0xFF0C0E0F);
-  static const surfaceContainer = Color(0xFF181A1B);
-  static const surfaceContainerLow = Color(0xFF111415);
-  static const surfaceContainerHigh = Color(0xFF1D2021);
-  static const surfaceContainerHighest = Color(0xFF232628);
-  static const surfaceBright = Color(0xFF2A2C2E);
-  static const surfaceVariant = Color(0xFF232628);
+  // Core — dark navy matching the sky in the app background image
+  static const background = Color(0xFF030D1B);
+  static const surface = Color(0xFF030D1B);
+  static const surfaceDim = Color(0xFF020A16);
+  static const surfaceContainer = Color(0xFF0A1828);
+  static const surfaceContainerLow = Color(0xFF071223);
+  static const surfaceContainerHigh = Color(0xFF0F2035);
+  static const surfaceContainerHighest = Color(0xFF152840);
+  static const surfaceBright = Color(0xFF1C334D);
+  static const surfaceVariant = Color(0xFF152840);
 
   // Primary (Cyan)
   static const primary = Color(0xFF81ECFF);

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'auth_service.dart';
+import 'notification_service.dart';
 
 class TaskService {
   static FirebaseFirestore? get _db {
@@ -47,6 +48,7 @@ class TaskService {
     required String type,
     required String priority,
     String description = '',
+    int estimatedMinutes = 45,
   }) async {
     final col = _col;
     final userId = _userId;
@@ -67,7 +69,7 @@ class TaskService {
       'priority': priority,
       'description': description,
       'status': 'notStarted',
-      'estimatedMinutes': 60,
+      'estimatedMinutes': estimatedMinutes,
       'reminderAt': Timestamp.fromDate(
         dueDate.subtract(const Duration(hours: 12)),
       ),
@@ -76,6 +78,17 @@ class TaskService {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // Schedule a local reminder whose lead time scales with priority
+    // (High → 24h, Medium → 12h, Low → 6h). See NotificationService for details.
+    await NotificationService.instance.scheduleTaskReminder(
+      taskId: ref.id,
+      title: title,
+      subject: subject,
+      dueDate: dueDate,
+      priority: priority,
+    );
+
     return ref.id;
   }
 
@@ -99,6 +112,7 @@ class TaskService {
     required String type,
     required String priority,
     String description = '',
+    int? estimatedMinutes,
   }) async {
     if (_userId == null) return;
     await _col?.doc(id).update({
@@ -109,13 +123,24 @@ class TaskService {
       'taskType': type,
       'priority': priority,
       'description': description,
+      if (estimatedMinutes != null) 'estimatedMinutes': estimatedMinutes,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // Re-schedule reminder for the (possibly new) due date / priority.
+    await NotificationService.instance.scheduleTaskReminder(
+      taskId: id,
+      title: title,
+      subject: subject,
+      dueDate: dueDate,
+      priority: priority,
+    );
   }
 
   /// Delete a task
   static Future<void> deleteTask(String id) async {
     if (_userId == null) return;
+    await NotificationService.instance.cancelTaskReminder(id);
     await _col?.doc(id).delete();
   }
 }

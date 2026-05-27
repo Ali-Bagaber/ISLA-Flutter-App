@@ -1,0 +1,23 @@
+// pubspec.yaml
+flutter:
+  assets:
+    - assets/images/logo_dark_1024.png
+    - assets/images/logo_light_card_1024.png
+    - assets/images/logo_transparent_badge_1024.png
+    - assets/images/app_icon_1024.png
+
+// Use logo based on current theme
+final isDark = Theme.of(context).brightness == Brightness.dark;
+
+Image.asset(
+  isDark
+      ? 'assets/images/logo_dark_1024.png'
+      : 'assets/images/logo_light_card_1024.png',
+  width: 180,
+);
+
+// Recommended usage:
+// logo_dark_1024.png               -> splash/onboarding/login dark pages
+// logo_light_card_1024.png         -> light theme pages
+// logo_transparent_badge_1024.png  -> profile/header/card logo on any background
+// app_icon_1024.png                -> launcher icon source

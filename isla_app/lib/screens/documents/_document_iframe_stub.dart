@@ -6,12 +6,14 @@ class DocumentIframeView extends StatelessWidget {
   final String url;
   final String type;
   final bool drawMode;
+  final int currentPage;
 
   const DocumentIframeView({
     super.key,
     required this.url,
     required this.type,
     required this.drawMode,
+    this.currentPage = 1,
   });
 
   @override

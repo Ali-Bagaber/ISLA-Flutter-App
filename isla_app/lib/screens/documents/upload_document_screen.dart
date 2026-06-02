@@ -239,7 +239,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                 enabled: !_isSaving,
                 decoration: const InputDecoration(
                   hintText: 'Enter document title',
-                  prefixIcon: Icon(Icons.title_rounded),
+                  prefixIcon: const Icon(Icons.title, size: 18),
                 ),
               ),
 
@@ -255,7 +255,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                     : null,
                 decoration: const InputDecoration(
                   hintText: 'Choose a course',
-                  prefixIcon: Icon(Icons.folder_outlined),
+                  prefixIcon: const Icon(Icons.folder_outlined, size: 18),
                 ),
                 items: [
                   ..._courseNames.map(
@@ -265,7 +265,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                     value: '__new__',
                     child: Row(children: [
                       Icon(Icons.add_rounded,
-                          size: 18, color: AppTheme.primaryColor),
+                          size: 14, color: AppTheme.primaryColor),
                       SizedBox(width: 6),
                       Text('Create new course',
                           style: TextStyle(color: AppTheme.primaryColor)),
@@ -296,9 +296,9 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                 decoration: const InputDecoration(
                   hintText:
                       'e.g. Chapter 3 covers recursion, trees, and sorting algorithms',
-                  prefixIcon: Padding(
+                  prefixIcon: const Padding(
                     padding: EdgeInsets.only(bottom: 40),
-                    child: Icon(Icons.notes_rounded),
+                    child: Icon(Icons.sticky_note_2_outlined, size: 18),
                   ),
                   alignLabelWithHint: true,
                 ),

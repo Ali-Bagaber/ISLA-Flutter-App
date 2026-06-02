@@ -88,7 +88,22 @@ class NotificationService {
     String priority = 'Medium',
     int? hoursBefore,
   }) async {
-    if (kIsWeb || !_initialised) return;
+    if (!_initialised) return;
+
+    // Web: fire an immediate browser notification (no scheduling API available).
+    if (kIsWeb) {
+      final p = priority.toLowerCase();
+      final notifTitle = p == 'high'
+          ? 'Important task reminder: $title'
+          : p == 'low'
+              ? 'Heads up: $title'
+              : 'Task reminder: $title';
+      final notifBody = subject.isEmpty
+          ? 'Task due soon — open ISLA to check your schedule.'
+          : '$subject · due soon, open ISLA to start.';
+      _webNotify(notifTitle, notifBody);
+      return;
+    }
 
     final id = _idFor(taskId);
     await _plugin.cancel(id); // replace any older schedule
@@ -172,8 +187,122 @@ class NotificationService {
   }
 
   Future<void> cancelTaskReminder(String taskId) async {
-    if (kIsWeb || !_initialised) return;
+    if (kIsWeb || !_initialised) return; // nothing to cancel on web
     await _plugin.cancel(_idFor(taskId));
+  }
+
+  /// Schedule an alarm that fires at the exact due time.
+  /// Sound and vibration intensity scale with [priority]:
+  ///   High   → max importance, full vibration (loudest system sound)
+  ///   Medium → high importance, normal vibration
+  ///   Low    → min importance, no sound / no vibration (silent badge)
+  Future<void> scheduleDueTimeAlarm({
+    required String taskId,
+    required String title,
+    required String subject,
+    required DateTime dueDate,
+    String priority = 'Medium',
+  }) async {
+    if (!_initialised) return;
+
+    if (kIsWeb) {
+      // Web has no scheduler — fire immediately only if already due.
+      if (!dueDate.isAfter(DateTime.now())) {
+        final p = priority.toLowerCase();
+        final notifTitle = p == 'high'
+            ? 'Task due now (High priority): $title'
+            : 'Task due now: $title';
+        final notifBody = subject.isEmpty
+            ? 'This task is now due — open ISLA to complete it.'
+            : '$subject — task now due.';
+        _webNotify(notifTitle, notifBody);
+      }
+      return;
+    }
+
+    final id = _dueIdFor(taskId);
+    await _plugin.cancel(id); // replace existing alarm
+
+    final p = priority.toLowerCase();
+
+    final String channelId;
+    final String channelName;
+    final String channelDesc;
+    final Importance importance;
+    final Priority androidPriority;
+    final bool enableVibration;
+    final bool playSound;
+
+    if (p == 'high') {
+      channelId = 'tasks_high_alarm';
+      channelName = 'High-priority alarms';
+      channelDesc = 'Loud alarm when a high-priority task is due.';
+      importance = Importance.max;
+      androidPriority = Priority.max;
+      enableVibration = true;
+      playSound = true;
+    } else if (p == 'low') {
+      channelId = 'tasks_low_due';
+      channelName = 'Low-priority due';
+      channelDesc = 'Silent nudge when a low-priority task is due.';
+      importance = Importance.min;
+      androidPriority = Priority.min;
+      enableVibration = false;
+      playSound = false;
+    } else {
+      channelId = 'tasks_due';
+      channelName = 'Task due alerts';
+      channelDesc = 'Notification when a task reaches its due time.';
+      importance = Importance.high;
+      androidPriority = Priority.high;
+      enableVibration = true;
+      playSound = true;
+    }
+
+    final notifTitle = p == 'high' ? 'Task due now (High): $title' : 'Task due: $title';
+    final notifBody = subject.isEmpty
+        ? 'This task is now due — open ISLA to complete it.'
+        : '$subject — task now due.';
+
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        channelId,
+        channelName,
+        channelDescription: channelDesc,
+        importance: importance,
+        priority: androidPriority,
+        enableVibration: enableVibration,
+        playSound: playSound,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentSound: playSound,
+        presentBanner: true,
+      ),
+    );
+
+    final now = DateTime.now();
+    if (dueDate.isBefore(now)) {
+      await _plugin.show(id, notifTitle, notifBody, details, payload: 'task:$taskId');
+      return;
+    }
+
+    final scheduled = tz.TZDateTime.from(dueDate, tz.local);
+    await _plugin.zonedSchedule(
+      id,
+      notifTitle,
+      notifBody,
+      scheduled,
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'task:$taskId',
+    );
+  }
+
+  Future<void> cancelDueTimeAlarm(String taskId) async {
+    if (kIsWeb || !_initialised) return;
+    await _plugin.cancel(_dueIdFor(taskId));
   }
 
   // ── Pomodoro end ───────────────────────────────────────────────────────────
@@ -304,6 +433,11 @@ class NotificationService {
   /// Stable positive 31-bit int derived from a string id (notification id limit).
   static int _idFor(String key) =>
       (key.hashCode & 0x7FFFFFFF).clamp(1, 0x7FFFFFFF);
+
+  /// Separate ID namespace for the at-due-time alarm (avoids colliding with the
+  /// advance reminder scheduled by [scheduleTaskReminder]).
+  static int _dueIdFor(String taskId) =>
+      ('due:$taskId'.hashCode & 0x7FFFFFFF).clamp(1, 0x7FFFFFFF);
 
   /// Fire a browser notification (web only). Silently ignored if the user
   /// hasn't granted permission.

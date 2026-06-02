@@ -25,7 +25,7 @@ class IslaLogo extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Image.asset(
-          'assets/images/isla_logo_512.png',
+          'assets/images/isla_logo_256.png',
           width: markSize,
           height: markSize,
           fit: BoxFit.contain,
@@ -118,7 +118,7 @@ class _IslaProfileAvatarState extends State<IslaProfileAvatar> {
               height: size,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) =>
-                  Icon(Icons.person, size: widget.radius, color: iconColor),
+                  Icon(Icons.person, size: widget.radius * 0.9, color: iconColor),
             )
           : Icon(Icons.person, size: widget.radius, color: iconColor),
     );

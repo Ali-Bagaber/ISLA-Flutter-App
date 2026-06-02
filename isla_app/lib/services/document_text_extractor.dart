@@ -39,6 +39,36 @@ class DocumentTextExtractor {
     }
   }
 
+  /// Returns the page / slide count without re-extracting full text.
+  static int extractPageCount({
+    required String fileName,
+    required Uint8List bytes,
+  }) {
+    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    try {
+      switch (ext) {
+        case 'pdf':
+          final doc = PdfDocument(inputBytes: bytes);
+          final count = doc.pages.count;
+          doc.dispose();
+          return count;
+        case 'pptx':
+        case 'ppt':
+          final archive = ZipDecoder().decodeBytes(bytes);
+          return archive.files
+              .where((f) =>
+                  f.isFile &&
+                  f.name.startsWith('ppt/slides/slide') &&
+                  f.name.endsWith('.xml'))
+              .length;
+        default:
+          return 0;
+      }
+    } catch (_) {
+      return 0;
+    }
+  }
+
   // ── PDF ────────────────────────────────────────────────────────────────────
   static String _extractPdf(Uint8List bytes) {
     final document = PdfDocument(inputBytes: bytes);

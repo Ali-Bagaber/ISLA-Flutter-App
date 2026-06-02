@@ -21,7 +21,7 @@ class SelectIntentionScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 8),
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  icon: const Icon(Icons.arrow_back, size: 16),
                   color: IslaColors.onSurfaceVariant,
                   onPressed: () => context.pop(),
                 ),

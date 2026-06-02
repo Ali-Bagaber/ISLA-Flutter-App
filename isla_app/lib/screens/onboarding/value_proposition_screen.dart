@@ -36,9 +36,9 @@ class ValuePropositionScreen extends StatelessWidget {
                 children: [
                   const Spacer(flex: 2),
                   Image.asset(
-                    'assets/images/isla_logo_1024.png',
-                    width: 100,
-                    height: 100,
+                    'assets/images/isla_logo_512.png',
+                    width: 120,
+                    height: 120,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 36),

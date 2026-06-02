@@ -46,6 +46,56 @@ class _LoginScreenState extends State<LoginScreen> {
     // On success, AuthGate stream updates automatically → navigates to MainNavigation
   }
 
+  Future<void> _showForgotPassword() async {
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter your email and we\'ll send a reset link.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Email address',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Send Link'),
+          ),
+        ],
+      ),
+    );
+    if (send != true || emailCtrl.text.trim().isEmpty) return;
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    final error = await AuthService.sendPasswordReset(emailCtrl.text.trim());
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(error ?? 'Reset link sent — check your inbox.'),
+      backgroundColor: error != null ? AppTheme.error : AppTheme.success,
+    ));
+  }
+
   Future<void> _loginWithGoogle() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
@@ -63,14 +113,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     }
-  }
-
-  void _showComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Apple sign-in is not available yet.'),
-      ),
-    );
   }
 
   @override
@@ -99,8 +141,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Image.asset(
                         'assets/images/isla_logo_512.png',
-                        width: 72,
-                        height: 72,
+                        width: 80,
+                        height: 80,
                       ),
                       const SizedBox(width: 10),
                       ShaderMask(
@@ -150,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(color: textPrimary),
                           decoration: InputDecoration(
                             hintText: 'Email address',
-                            prefixIcon: Icon(Icons.email_outlined, color: textSecondary, size: 20),
+                            prefixIcon: Icon(Icons.email_outlined, color: textSecondary, size: 18),
                           ),
                           validator: (v) => (v == null || v.isEmpty) ? 'Please enter your email' : null,
                         ),
@@ -162,12 +204,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(color: textPrimary),
                           decoration: InputDecoration(
                             hintText: 'Password',
-                            prefixIcon: Icon(Icons.lock_outline, color: textSecondary, size: 20),
+                            prefixIcon: Icon(Icons.lock_outline, color: textSecondary, size: 18),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                                 color: textSecondary,
-                                size: 20,
+                                size: 18,
                               ),
                               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             ),
@@ -177,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {},
+                            onPressed: _showForgotPassword,
                             child: Text(
                               'Forgot Password?',
                               style: AppTheme.bodySmall.copyWith(
@@ -229,15 +271,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           iconColor: const Color(0xFFDB4437),
                           isDark: isDark,
                           onTap: _loginWithGoogle,
-                        ),
-                        const SizedBox(height: 10),
-                        // Apple
-                        _SocialButton(
-                          label: 'Continue with Apple',
-                          icon: Icons.apple_rounded,
-                          iconColor: textPrimary,
-                          isDark: isDark,
-                          onTap: _showComingSoon,
                         ),
                       ],
                     ),

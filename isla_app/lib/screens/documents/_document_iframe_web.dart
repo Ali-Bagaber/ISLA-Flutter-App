@@ -12,12 +12,14 @@ class DocumentIframeView extends StatefulWidget {
   final String url;
   final String type;
   final bool drawMode;
+  final int currentPage;
 
   const DocumentIframeView({
     super.key,
     required this.url,
     required this.type,
     required this.drawMode,
+    this.currentPage = 1,
   });
 
   @override
@@ -33,7 +35,7 @@ class _DocumentIframeViewState extends State<DocumentIframeView> {
     super.initState();
     _viewType =
         'doc-viewer-${identityHashCode(this)}-${DateTime.now().millisecondsSinceEpoch}';
-    final src = _iframeSrc(widget.url, widget.type);
+    final src = _iframeSrc(widget.url, widget.type, widget.currentPage);
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int id) {
       final iframe = html.IFrameElement()
         ..src = src
@@ -53,11 +55,21 @@ class _DocumentIframeViewState extends State<DocumentIframeView> {
     if (old.drawMode != widget.drawMode) {
       _iframe?.style.pointerEvents = widget.drawMode ? 'none' : 'auto';
     }
+    // When page changes, navigate the PDF viewer to the new page.
+    // Chrome's built-in PDF viewer honours the #page=N fragment.
+    if (old.currentPage != widget.currentPage) {
+      final newSrc = _iframeSrc(widget.url, widget.type, widget.currentPage);
+      _iframe?.src = newSrc;
+    }
   }
 
-  String _iframeSrc(String url, String type) {
+  String _iframeSrc(String url, String type, int page) {
     final t = type.toUpperCase();
-    if (t == 'PDF') return url;
+    if (t == 'PDF') {
+      // Strip any existing fragment then re-add with the correct page.
+      final base = url.contains('#') ? url.substring(0, url.indexOf('#')) : url;
+      return '$base#page=$page';
+    }
     if (t == 'PPTX' || t == 'DOCX') {
       return 'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}&embedded=true';
     }

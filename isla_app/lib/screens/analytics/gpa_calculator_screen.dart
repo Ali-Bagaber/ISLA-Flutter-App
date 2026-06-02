@@ -152,7 +152,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addSemester,
         backgroundColor: AppTheme.primaryColor,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 16),
         label: const Text('Add Semester',
             style: TextStyle(color: Colors.white)),
       ),
@@ -219,8 +219,8 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.school_outlined,
-                            size: 40, color: textSecondary),
+                        Icon(Icons.school_rounded,
+                            size: 38, color: textSecondary),
                         const SizedBox(height: 10),
                         Text('No semesters yet',
                             style: TextStyle(
@@ -377,7 +377,7 @@ class _SemesterCardState extends State<_SemesterCard> {
                 ),
                 IconButton(
                   onPressed: widget.onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   color: widget.textSecondary,
                   tooltip: 'Delete semester',
                 ),
@@ -411,7 +411,7 @@ class _SemesterCardState extends State<_SemesterCard> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: widget.onAddCourse,
-                icon: const Icon(Icons.add_rounded, size: 18),
+                icon: const Icon(Icons.add_rounded, size: 14),
                 label: const Text('Add Course'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.primaryColor,
@@ -538,7 +538,7 @@ class _CourseRowState extends State<_CourseRow> {
           ),
           IconButton(
             onPressed: widget.onRemove,
-            icon: const Icon(Icons.close_rounded, size: 18),
+            icon: const Icon(Icons.close_rounded, size: 16),
             color: widget.textSecondary,
             tooltip: 'Remove course',
           ),

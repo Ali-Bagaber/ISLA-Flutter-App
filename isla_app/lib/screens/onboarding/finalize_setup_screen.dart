@@ -38,26 +38,41 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
   Future<void> _finishSetup() async {
     if (_saving) return;
     setState(() => _saving = true);
-    try {
-      await UserSettingsService.saveStudyPlan(
-        onboardingComplete: true,
-        goal: _selectedGoal.name,
-        focusSubject: _studyFocus,
-        deadline: _deadline,
-        sessionMinutes: _sessionMinutes,
-        studyDays: _studyDays.toList()..sort(),
-      );
-      // Mirror sessionMinutes into the focus prefs so the Pomodoro timer
-      // picks it up the next time the user starts a session.
-      await UserSettingsService.saveFocus(workMinutes: _sessionMinutes);
-      if (!mounted) return;
-      context.goNamed('app');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
+
+    // Firestore can hit a transient internal-state error on web when the
+    // WebChannel reconnects mid-write. Retry once after a short pause.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await UserSettingsService.saveStudyPlan(
+          onboardingComplete: true,
+          goal: _selectedGoal.name,
+          focusSubject: _studyFocus,
+          deadline: _deadline,
+          sessionMinutes: _sessionMinutes,
+          studyDays: _studyDays.toList()..sort(),
+        );
+        await UserSettingsService.saveFocus(workMinutes: _sessionMinutes);
+        if (!mounted) return;
+        context.goNamed('app');
+        return;
+      } catch (e) {
+        final isTransient = e.toString().contains('INTERNAL ASSERTION') ||
+            e.toString().contains('Unexpected state');
+        if (attempt == 0 && isTransient) {
+          await Future.delayed(const Duration(milliseconds: 600));
+          continue;
+        }
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Could not save — please check your connection and try again.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
     }
   }
 
@@ -76,16 +91,6 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
     _StudyGoal.improveGrades: Icons.trending_up_rounded,
     _StudyGoal.stayConsistent: Icons.check_circle_outline_rounded,
   };
-
-  static const _subjects = [
-    'Operating Systems',
-    'Data Structures',
-    'Mathematics',
-    'Database Systems',
-    'Software Engineering',
-    'Computer Networks',
-    'Other',
-  ];
 
   static const _sessionOptions = [15, 25, 50];
 
@@ -117,7 +122,7 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
         children: [
           const SizedBox(height: 8),
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            icon: const Icon(Icons.arrow_back, size: 16),
             color: IslaColors.onSurfaceVariant,
             onPressed: () => context.pop(),
           ),
@@ -196,7 +201,7 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
         children: [
           const SizedBox(height: 8),
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            icon: const Icon(Icons.arrow_back, size: 16),
             color: IslaColors.onSurfaceVariant,
             onPressed: () => setState(() => _step = 0),
           ),
@@ -222,10 +227,16 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
           const SizedBox(height: 24),
           const _FormLabel('Study Focus'),
           const SizedBox(height: 8),
-          _DropdownField(
-            value: _studyFocus,
-            items: _subjects,
-            onChanged: (v) => setState(() => _studyFocus = v),
+          StreamBuilder<List<String>>(
+            stream: UserSettingsService.watchSubjects(),
+            builder: (context, snap) {
+              final subjects = snap.data ?? UserSettingsService.defaultSubjects;
+              return _DropdownField(
+                value: subjects.contains(_studyFocus) ? _studyFocus : subjects.first,
+                items: subjects,
+                onChanged: (v) => setState(() => _studyFocus = v),
+              );
+            },
           ),
           const SizedBox(height: 16),
           const _FormLabel('Study Deadline'),

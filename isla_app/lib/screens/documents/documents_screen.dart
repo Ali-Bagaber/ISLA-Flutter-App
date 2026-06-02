@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../services/auth_service.dart';
 import '../../services/document_service.dart';
+import '../../services/nav_controller.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
+import 'package:go_router/go_router.dart';
 import '../study_aids/summary_screen.dart';
 import '../study_aids/flashcards_screen.dart';
 import '../study_aids/quiz_screen.dart';
@@ -19,6 +23,14 @@ class DocumentsScreen extends StatefulWidget {
 
 class _DocumentsScreenState extends State<DocumentsScreen> {
   final Set<String> _collapsed = {};
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   static const List<Color> _courseColors = [
     Color(0xFF6366F1),
@@ -140,25 +152,86 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     );
   }
 
+  void _showNotificationsSheet() => showIslaNotificationsInbox(context);
+
+  void _showProfileSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.read<NavController>().goTo(6);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const Text('Sign Out'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await AuthService.signOut();
+                if (mounted) context.goNamed('splash');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
 
+    final outlineSoft = isDark
+        ? const Color(0xFF2E3538)
+        : const Color(0xFFD4DEE4);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
-      appBar: AppBar(
-        backgroundColor: AppTheme.getCardColor(isDark),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: const IslaLogo(),
-        actions: [
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Center(child: IslaProfileAvatar()),
-          ),
-        ],
-      ),
-      body: Container(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              height: 60,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.getAppBarBg(isDark),
+                border: Border(
+                    bottom: BorderSide(color: outlineSoft, width: 0.8)),
+              ),
+              child: Row(
+                children: [
+                  const IslaLogo(markSize: 28, textSize: 17),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _showNotificationsSheet,
+                    icon: Icon(Icons.notifications_outlined,
+                        color: textSecondary, size: 22),
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                  const SizedBox(width: 4),
+                  IslaProfileAvatar(
+                    radius: 17,
+                    onTap: _showProfileSheet,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
         decoration: AppTheme.getBackgroundDecoration(isDark),
         child: StreamBuilder<List<Map<String, dynamic>>>(
           stream: DocumentService.watchCourses(),
@@ -190,6 +263,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
                 final courseNames = grouped.keys.toList()..sort();
 
+                // Apply search filter
+                final q = _searchQuery.toLowerCase();
+                final filteredCourseNames = q.isEmpty
+                    ? courseNames
+                    : courseNames.where((name) {
+                        if (name.toLowerCase().contains(q)) return true;
+                        final docs = grouped[name] ?? [];
+                        return docs.any((d) =>
+                            (d['title'] as String? ?? '').toLowerCase().contains(q) ||
+                            (d['subject'] as String? ?? '').toLowerCase().contains(q));
+                      }).toList();
+                final displayCourses = q.isEmpty ? courseNames : filteredCourseNames;
+
                 return CustomScrollView(
                   slivers: [
                     SliverToBoxAdapter(
@@ -216,17 +302,47 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                         ),
                       ),
                     ),
-                    if (courseNames.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (v) => setState(() => _searchQuery = v),
+                          decoration: InputDecoration(
+                            hintText: 'Search documents or courses…',
+                            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.close_rounded, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (displayCourses.isEmpty)
                       SliverFillRemaining(
                         child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(Icons.folder_open_rounded,
-                                  size: 56, color: AppTheme.textLight),
+                                  size: 48, color: AppTheme.textLight),
                               const SizedBox(height: 12),
                               Text(
-                                'No courses yet.\nTap + to create a course or upload a document.',
+                                q.isNotEmpty
+                                    ? 'No results for "$q".'
+                                    : 'No courses yet.\nTap + to create a course or upload a document.',
                                 textAlign: TextAlign.center,
                                 style: AppTheme.bodyMedium
                                     .copyWith(color: AppTheme.textSecondary),
@@ -239,7 +355,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                       SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            final courseName = courseNames[index];
+                            final courseName = displayCourses[index];
                             final docs = grouped[courseName] ?? [];
                             final isCollapsed = _collapsed.contains(courseName);
                             final color = _courseColor(courseName);
@@ -283,7 +399,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                               },
                             );
                           },
-                          childCount: courseNames.length,
+                          childCount: displayCourses.length,
                         ),
                       ),
                     const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -293,6 +409,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             );
           },
         ),
+            ),
+          ),
+        ],
+      ),
       ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
@@ -315,7 +435,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               MaterialPageRoute(builder: (_) => const UploadDocumentScreen()),
             ),
             backgroundColor: AppTheme.primaryColor,
-            icon: const Icon(Icons.upload_file_rounded, color: Colors.white),
+            icon: const Icon(Icons.upload_rounded, color: Colors.white),
             label:
                 const Text('Upload Doc', style: TextStyle(color: Colors.white)),
           ),
@@ -389,7 +509,7 @@ class _CourseSectionCard extends StatelessWidget {
                       color: color.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.folder_rounded, color: color, size: 22),
+                    child: Icon(Icons.folder_rounded, color: color, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -415,14 +535,14 @@ class _CourseSectionCard extends StatelessWidget {
                   ),
                   IconButton(
                     icon: Icon(Icons.add_circle_outline_rounded,
-                        color: color, size: 22),
+                        color: color, size: 20),
                     tooltip: 'Upload document to this course',
                     onPressed: onAddDoc,
                   ),
                   if (onDeleteCourse != null)
                     PopupMenuButton<String>(
                       icon: Icon(Icons.more_vert,
-                          color: AppTheme.getTextSecondary(isDark), size: 20),
+                          color: AppTheme.getTextSecondary(isDark), size: 16),
                       onSelected: (v) {
                         if (v == 'delete') onDeleteCourse!();
                       },
@@ -430,8 +550,8 @@ class _CourseSectionCard extends StatelessWidget {
                         const PopupMenuItem(
                           value: 'delete',
                           child: Row(children: [
-                            Icon(Icons.delete_rounded,
-                                size: 18, color: AppTheme.error),
+                            Icon(Icons.delete_outline_rounded,
+                                size: 16, color: AppTheme.error),
                             SizedBox(width: 8),
                             Text('Delete Course',
                                 style: TextStyle(color: AppTheme.error)),
@@ -444,6 +564,7 @@ class _CourseSectionCard extends StatelessWidget {
                         ? Icons.keyboard_arrow_down_rounded
                         : Icons.keyboard_arrow_up_rounded,
                     color: AppTheme.getTextSecondary(isDark),
+                    size: 14,
                   ),
                 ],
               ),
@@ -462,8 +583,8 @@ class _CourseSectionCard extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Icon(Icons.upload_file_rounded,
-                        color: AppTheme.getTextSecondary(isDark), size: 18),
+                    Icon(Icons.upload_rounded,
+                        color: AppTheme.getTextSecondary(isDark), size: 16),
                     const SizedBox(width: 8),
                     Text(
                       'No documents yet — tap + to add one',
@@ -527,9 +648,9 @@ class _DocumentListTile extends StatelessWidget {
       case 'PPTX':
         return Icons.slideshow_rounded;
       case 'DOCX':
-        return Icons.article_rounded;
-      default:
         return Icons.description_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
     }
   }
 
@@ -548,7 +669,7 @@ class _DocumentListTile extends StatelessWidget {
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(_typeIcon, color: color, size: 22),
+              child: Icon(_typeIcon, color: color, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -594,13 +715,13 @@ class _DocumentListTile extends StatelessWidget {
             ),
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert,
-                  color: AppTheme.getTextSecondary(isDark), size: 20),
+                  color: AppTheme.getTextSecondary(isDark), size: 16),
               onSelected: onAction,
               itemBuilder: (_) => [
                 const PopupMenuItem(
                   value: 'summary',
                   child: Row(children: [
-                    Icon(Icons.summarize_rounded, size: 18),
+                    Icon(Icons.description_rounded, size: 16),
                     SizedBox(width: 8),
                     Text('Summarize'),
                   ]),
@@ -608,7 +729,7 @@ class _DocumentListTile extends StatelessWidget {
                 const PopupMenuItem(
                   value: 'flashcards',
                   child: Row(children: [
-                    Icon(Icons.style_rounded, size: 18),
+                    Icon(Icons.layers_rounded, size: 16),
                     SizedBox(width: 8),
                     Text('Flashcards'),
                   ]),
@@ -616,7 +737,7 @@ class _DocumentListTile extends StatelessWidget {
                 const PopupMenuItem(
                   value: 'quiz',
                   child: Row(children: [
-                    Icon(Icons.quiz_rounded, size: 18),
+                    Icon(Icons.help_outline_rounded, size: 16),
                     SizedBox(width: 8),
                     Text('Quiz'),
                   ]),
@@ -625,7 +746,7 @@ class _DocumentListTile extends StatelessWidget {
                 const PopupMenuItem(
                   value: 'delete',
                   child: Row(children: [
-                    Icon(Icons.delete_rounded, size: 18, color: AppTheme.error),
+                    Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.error),
                     SizedBox(width: 8),
                     Text('Delete', style: TextStyle(color: AppTheme.error)),
                   ]),

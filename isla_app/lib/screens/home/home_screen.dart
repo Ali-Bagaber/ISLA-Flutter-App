@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _totalTasks = 0;
   int _streak = 0;
   int _totalStudyMinutes = 0;
+  int _lastCelebratedStreak = 0;
   List<Map<String, dynamic>> _upcomingTasks = const [];
 
   /// Tasks scheduled for today (dueDate == today), straight from Firestore.
@@ -180,6 +181,68 @@ class _HomeScreenState extends State<HomeScreen> {
       _totalStudyMinutes = total;
       _streak = streak;
     });
+    _checkStreakMilestone(streak);
+  }
+
+  static const _milestones = [3, 7, 14, 30];
+
+  void _checkStreakMilestone(int streak) {
+    for (final m in _milestones) {
+      if (streak >= m && _lastCelebratedStreak < m) {
+        _lastCelebratedStreak = m;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showStreakMilestone(m);
+        });
+        break;
+      }
+    }
+  }
+
+  void _showStreakMilestone(int days) {
+    final emoji = days >= 30 ? '🏆' : days >= 14 ? '🔥' : days >= 7 ? '⭐' : '🌟';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 56)),
+            const SizedBox(height: 12),
+            Text(
+              '$days-Day Streak!',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              days >= 30
+                  ? 'Incredible dedication — a full month of studying!'
+                  : days >= 14
+                      ? 'Two weeks strong. You\'re building a habit!'
+                      : days >= 7
+                          ? 'One full week of consistent studying. Keep it up!'
+                          : 'Great start — 3 days in a row!',
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Keep Going!'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _updateGreeting() {
@@ -235,15 +298,15 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: Icon(
                 isDone
-                    ? Icons.refresh_rounded
-                    : Icons.check_circle_outline_rounded,
+                    ? Icons.sync_rounded
+                    : Icons.check_circle_rounded,
                 color: AppTheme.success,
               ),
               title: Text(isDone ? 'Mark as not done' : 'Mark complete'),
               onTap: () => Navigator.pop(ctx, 'toggle'),
             ),
             ListTile(
-              leading: const Icon(Icons.edit_outlined,
+              leading: const Icon(Icons.edit_rounded,
                   color: AppTheme.primaryColor),
               title: const Text('Edit task'),
               onTap: () => Navigator.pop(ctx, 'edit'),
@@ -372,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.notifications_active_rounded,
+                  const Icon(Icons.notifications_outlined,
                       color: AppTheme.primaryColor),
                   const SizedBox(width: 8),
                   Text('Notifications', style: AppTheme.headingSmall),
@@ -398,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 6),
                   ...pending.take(3).map((t) => ListTile(
                         dense: true,
-                        leading: const Icon(Icons.event_rounded,
+                        leading: const Icon(Icons.calendar_today_rounded,
                             color: AppTheme.primaryColor),
                         title: Text(t['title']?.toString() ?? ''),
                         subtitle: Text(t['subject']?.toString() ?? ''),
@@ -413,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ...upcoming.map((t) => ListTile(
                         dense: true,
                         leading: const Icon(
-                            Icons.schedule_rounded,
+                            Icons.access_time_rounded,
                             color: AppTheme.warning),
                         title: Text(t['title']?.toString() ?? ''),
                         subtitle: Text(_formatDue(t['dueDate'])),
@@ -440,14 +503,14 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.person_outline_rounded),
+              leading: const Icon(Icons.person_outline),
               title: const Text('Account'),
               subtitle:
                   Text(FirebaseAuth.instance.currentUser?.email ?? '—'),
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.refresh_rounded),
+              leading: const Icon(Icons.sync_rounded),
               title: const Text('Reload data'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -591,7 +654,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Center(
                                 child: Column(
                                   children: [
-                                    Icon(Icons.event_available_rounded,
+                                    Icon(Icons.calendar_today_rounded,
                                         color: textSecondary, size: 32),
                                     const SizedBox(height: 8),
                                     Text(
@@ -924,7 +987,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Expanded(
                           child: _QuickAction(
-                            icon: Icons.add_task_rounded,
+                            icon: Icons.checklist_rounded,
                             label: 'Add Task',
                             color: AppTheme.warning,
                             // Add Task is a sub-flow of Tasks — switch to the
@@ -938,7 +1001,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: _QuickAction(
-                            icon: Icons.auto_awesome_rounded,
+                            icon: Icons.auto_fix_high_rounded,
                             label: 'AI Tools',
                             color: AppTheme.primaryColor,
                             onTap: () =>
@@ -1177,7 +1240,7 @@ class _UpcomingCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, color: textSecondary, size: 20),
+          Icon(Icons.keyboard_arrow_right_rounded, color: textSecondary, size: 16),
         ],
       ),
     );

@@ -116,6 +116,10 @@ class DocumentService {
       fileName: fileName,
       bytes: fileBytes,
     );
+    final pageCount = DocumentTextExtractor.extractPageCount(
+      fileName: fileName,
+      bytes: fileBytes,
+    );
 
     await docRef.set({
       'documentId': docRef.id,
@@ -133,6 +137,7 @@ class DocumentService {
       'notes': description,
       'extractedText': extractedText,
       'extractedChars': extractedText.length,
+      'pageCount': pageCount,
       'userId': userId,
       'uploadDate': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),

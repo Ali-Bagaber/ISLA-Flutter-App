@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pdfrx/pdfrx.dart';
 import '../../services/document_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -19,8 +20,6 @@ class _Stroke {
     required this.page,
   });
 
-  /// Firestore-safe shape. Points are flattened into a single list of doubles
-  /// `[x1, y1, x2, y2, ...]` because Firestore does not allow nested arrays.
   Map<String, dynamic> toJson() {
     final flat = <double>[];
     for (final p in points) {
@@ -81,11 +80,12 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
   bool _eraserMode = false;
   bool _drawMode = true;
 
-  /// 1-indexed page of the document the user is currently annotating.
-  /// Strokes are tagged with this and filtered for display, so strokes
-  /// drawn on page 3 don't show up when you scroll to page 5.
   int _currentPage = 1;
   late final TextEditingController _pageCtrl;
+
+  // PDF-specific state — only populated when fileType == PDF
+  PdfDocument? _pdfDoc;
+  bool _pdfLoading = false;
 
   static const _drawColors = [
     Colors.black,
@@ -97,11 +97,26 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
   ];
   static const _widths = [2.0, 4.0, 8.0];
 
+  bool get _isPdf => (widget.fileType ?? 'PDF').toUpperCase() == 'PDF';
+
   @override
   void initState() {
     super.initState();
     _pageCtrl = TextEditingController(text: '$_currentPage');
     _loadAnnotations();
+    if (_isPdf && widget.downloadUrl != null) {
+      _loadPdf();
+    }
+  }
+
+  Future<void> _loadPdf() async {
+    setState(() => _pdfLoading = true);
+    try {
+      final doc = await PdfDocument.openUri(Uri.parse(widget.downloadUrl!));
+      if (mounted) setState(() { _pdfDoc = doc; _pdfLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _pdfLoading = false);
+    }
   }
 
   Future<void> _loadAnnotations() async {
@@ -158,22 +173,17 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
     }
   }
 
-  void _toggleDrawMode() {
-    setState(() => _drawMode = !_drawMode);
-  }
+  void _toggleDrawMode() => setState(() => _drawMode = !_drawMode);
 
   void _onPointerDown(PointerDownEvent e) {
-    if (!_drawMode) return;
     setState(() => _currentPoints = [e.localPosition]);
   }
 
   void _onPointerMove(PointerMoveEvent e) {
-    if (!_drawMode) return;
     setState(() => _currentPoints = [..._currentPoints, e.localPosition]);
   }
 
   void _onPointerUp(PointerUpEvent e) {
-    if (!_drawMode) return;
     if (_currentPoints.isNotEmpty) {
       setState(() {
         _strokes.add(_Stroke(
@@ -188,7 +198,6 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
     }
   }
 
-  /// Strokes that belong to the page currently being viewed.
   List<_Stroke> get _strokesOnCurrentPage =>
       _strokes.where((s) => s.page == _currentPage).toList();
 
@@ -212,6 +221,8 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
 
   void _setPage(int page) {
     if (page < 1) page = 1;
+    final maxPage = _pdfDoc?.pages.length ?? 9999;
+    if (page > maxPage) page = maxPage;
     if (page == _currentPage) return;
     setState(() {
       _currentPage = page;
@@ -256,6 +267,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
 
   @override
   void dispose() {
+    _pdfDoc?.dispose();
     _pageCtrl.dispose();
     super.dispose();
   }
@@ -269,8 +281,9 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
       canPop: !_dirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
+        final nav = Navigator.of(context);
         final ok = await _confirmExitIfDirty();
-        if (ok && mounted) Navigator.of(context).pop();
+        if (ok) nav.pop();
       },
       child: Scaffold(
         backgroundColor: Colors.grey[200],
@@ -295,7 +308,6 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
             ],
           ),
           actions: [
-            // Draw / View toggle — switches whether the iframe swallows pointer events.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: ToggleButtons(
@@ -313,7 +325,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.edit_rounded, size: 14),
+                      Icon(Icons.edit_rounded, size: 12),
                       SizedBox(width: 4),
                       Text('Draw', style: TextStyle(fontSize: 12)),
                     ],
@@ -321,7 +333,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.pan_tool_alt_rounded, size: 14),
+                      Icon(Icons.touch_app_rounded, size: 12),
                       SizedBox(width: 4),
                       Text('View', style: TextStyle(fontSize: 12)),
                     ],
@@ -330,13 +342,13 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.undo_rounded),
+              icon: const Icon(Icons.undo_rounded, size: 18),
               tooltip: 'Undo',
               onPressed: _strokesOnCurrentPage.isNotEmpty ? _undo : null,
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: 'Clear all',
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              tooltip: 'Clear page',
               onPressed: (_strokesOnCurrentPage.isNotEmpty ||
                       _currentPoints.isNotEmpty)
                   ? _clear
@@ -360,7 +372,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.save_rounded, size: 18),
+                    : const Icon(Icons.save_rounded, size: 16),
                 label: Text(_saving ? 'Saving' : 'Save'),
               ),
             ),
@@ -375,57 +387,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
                 padding: const EdgeInsets.all(12),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (hasViewer)
-                        DocumentIframeView(
-                          url: url,
-                          type: widget.fileType ?? 'PDF',
-                          drawMode: _drawMode,
-                        )
-                      else
-                        const ColoredBox(color: Colors.white),
-                      Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: _onPointerDown,
-                        onPointerMove: _onPointerMove,
-                        onPointerUp: _onPointerUp,
-                        child: CustomPaint(
-                          foregroundPainter: _AnnotationPainter(
-                            strokes: _strokesOnCurrentPage,
-                            currentPoints: _currentPoints,
-                            currentColor:
-                                _eraserMode ? Colors.white : _penColor,
-                            currentWidth: _eraserMode ? 20.0 : _penWidth,
-                          ),
-                          child: SizedBox.expand(
-                            child: !hasViewer &&
-                                    _strokes.isEmpty &&
-                                    _currentPoints.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.draw_rounded,
-                                            size: 56,
-                                            color: Colors.grey.shade300),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          'Draw freely with your pen',
-                                          style: TextStyle(
-                                              color: Colors.grey.shade400,
-                                              fontSize: 14),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: _buildDocumentLayer(hasViewer, url),
                 ),
               ),
             ),
@@ -435,7 +397,104 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
     );
   }
 
+  Widget _buildDocumentLayer(bool hasViewer, String? url) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // ── Document viewer ────────────────────────────────────────────────
+        if (_isPdf) ...[
+          if (_pdfLoading)
+            const ColoredBox(
+              color: Colors.white,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_pdfDoc != null)
+            ColoredBox(
+              color: Colors.white,
+              child: PdfPageView(
+                document: _pdfDoc!,
+                pageNumber: _currentPage,
+                alignment: Alignment.topCenter,
+              ),
+            )
+          else
+            const ColoredBox(color: Colors.white),
+        ] else if (hasViewer)
+          // PPTX / DOCX via Google Docs iframe (view only)
+          DocumentIframeView(
+            url: url!,
+            type: widget.fileType ?? 'PPTX',
+            drawMode: false,
+            currentPage: _currentPage,
+          )
+        else
+          const ColoredBox(color: Colors.white),
+
+        // ── Annotation strokes (always visible, never captures events) ─────
+        IgnorePointer(
+          child: CustomPaint(
+            painter: _AnnotationPainter(
+              strokes: _strokesOnCurrentPage,
+              currentPoints: _currentPoints,
+              currentColor: _eraserMode ? Colors.white : _penColor,
+              currentWidth: _eraserMode ? 20.0 : _penWidth,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+
+        // ── Drawing layer (captures events only when Draw mode is active) ──
+        if (_drawMode)
+          Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerUp,
+            child: const SizedBox.expand(),
+          ),
+
+        // ── Empty-state hint ───────────────────────────────────────────────
+        if (!hasViewer && _strokes.isEmpty && _currentPoints.isEmpty)
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.edit_rounded, size: 48, color: Colors.grey.shade300),
+                const SizedBox(height: 12),
+                Text(
+                  'Draw freely with your pen',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+
+        // ── PPTX/DOCX annotation notice ────────────────────────────────────
+        if (!_isPdf && hasViewer && _drawMode)
+          Positioned(
+            bottom: 12,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Annotation is available for PDF files only',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildToolbar() {
+    final totalPages = _pdfDoc?.pages.length;
     return Container(
       height: 58,
       color: Colors.white,
@@ -578,6 +637,14 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
                 icon: Icons.add_rounded,
                 onTap: () => _setPage(_currentPage + 1),
               ),
+              if (totalPages != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    'of $totalPages',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                  ),
+                ),
             ],
           ),
           const Spacer(),
@@ -591,7 +658,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
               ),
             ),
           Text(
-            'Page $_currentPage · ${_strokesOnCurrentPage.length} stroke${_strokesOnCurrentPage.length == 1 ? '' : 's'} (total ${_strokes.length})',
+            '${_strokesOnCurrentPage.length} stroke${_strokesOnCurrentPage.length == 1 ? '' : 's'} · total ${_strokes.length}',
             style: TextStyle(color: Colors.grey[500], fontSize: 11),
           ),
         ],

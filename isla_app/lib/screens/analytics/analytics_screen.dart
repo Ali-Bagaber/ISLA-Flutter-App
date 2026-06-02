@@ -9,9 +9,10 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/gpa_service.dart';
+import '../../services/nav_controller.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
 import 'gpa_calculator_screen.dart';
 
 class AnalyticsScreen extends StatelessWidget {
@@ -116,9 +117,130 @@ class AnalyticsScreen extends StatelessWidget {
     });
   }
 
+  /// Real per-day focus minutes for Mon–Sun of the current week.
+  /// Uses a single-field where clause (no composite index required);
+  /// the Monday cutoff is applied client-side inside the map.
+  static Stream<List<double>> _weeklyHoursStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value(List.filled(7, 0.0));
+    return db
+        .collection('sessions')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      final now = DateTime.now();
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final mondayStart = DateTime(monday.year, monday.month, monday.day);
+      final mins = List.filled(7, 0);
+      for (final doc in snap.docs) {
+        final ts = doc.data()['timestamp'];
+        final date = ts is Timestamp ? ts.toDate() : null;
+        if (date == null) continue;
+        final day = DateTime(date.year, date.month, date.day);
+        if (day.isBefore(mondayStart)) continue; // filter to current week
+        final dayIndex = date.weekday - 1; // 0 = Mon … 6 = Sun
+        if (dayIndex < 0 || dayIndex > 6) continue;
+        mins[dayIndex] += (doc.data()['focusMinutes'] as num? ?? 0).toInt();
+      }
+      // Zero out future days so the chart looks honest
+      for (var i = now.weekday; i < 7; i++) {
+        mins[i] = 0;
+      }
+      return mins.map((m) => m / 60.0).toList();
+    });
+  }
+
+  /// Current study streak derived from session timestamps.
+  static Stream<int> _streakStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value(0);
+    return db
+        .collection('sessions')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      final studyDates = <DateTime>{};
+      for (final doc in snap.docs) {
+        final ts = doc.data()['timestamp'];
+        final date = ts is Timestamp ? ts.toDate() : null;
+        if (date == null) continue;
+        studyDates.add(DateTime(date.year, date.month, date.day));
+      }
+      if (studyDates.isEmpty) return 0;
+      final today = DateTime.now();
+      var check = DateTime(today.year, today.month, today.day);
+      // Allow yesterday to count if user hasn't studied yet today
+      if (!studyDates.contains(check)) {
+        check = check.subtract(const Duration(days: 1));
+      }
+      var streak = 0;
+      while (studyDates.contains(check)) {
+        streak++;
+        check = check.subtract(const Duration(days: 1));
+      }
+      return streak;
+    });
+  }
+
+  /// Count of AI-generated items: summaries, flashcards, quizzes.
+  static Stream<Map<String, int>> _aiStatsStream() {
+    final db = _db;
+    final uid = _uid;
+    if (db == null || uid == null) return Stream.value({'summaries': 0, 'flashcards': 0, 'quizzes': 0});
+
+    Stream<int> count(String col) => db
+        .collection(col)
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((s) => s.docs.length);
+
+    return count('summaries').asyncExpand((s) =>
+        count('flashcards').asyncExpand((f) =>
+            count('quiz_aids').map((q) => {'summaries': s, 'flashcards': f, 'quizzes': q})));
+  }
+
   String _formatMinutes(int mins) {
     if (mins >= 60) return '${(mins / 60).toStringAsFixed(1)}h';
     return '${mins}m';
+  }
+
+  void _showNotificationsSheet(BuildContext context) =>
+      showIslaNotificationsInbox(context);
+
+  void _showProfileSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.read<NavController>().goTo(6);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const Text('Sign Out'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await AuthService.signOut();
+                if (context.mounted) context.goNamed('splash');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -127,14 +249,11 @@ class AnalyticsScreen extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? IslaColors.background : const Color(0xFFF4FBFE);
     final appBarBg = isDark ? IslaColors.background.withValues(alpha: 0.95) : const Color(0xF8FFFFFF);
-    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
     final onSurfaceMute =
         isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
     final outlineSoft = isDark
         ? IslaColors.outlineVariant.withValues(alpha: 0.4)
         : const Color(0xFFD4DEE4);
-    final surfaceHigh =
-        isDark ? const Color(0xFF232628) : const Color(0xFFE5F0F5);
 
     return Scaffold(
       backgroundColor: bg,
@@ -154,45 +273,18 @@ class AnalyticsScreen extends StatelessWidget {
                 children: [
                   const IslaLogo(markSize: 28, textSize: 17),
                   const Spacer(),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: () =>
-                            context.read<ThemeProvider>().setDarkMode(!isDark),
-                        icon: Icon(
-                          isDark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
-                          color: onSurfaceMute,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        onSelected: (v) async {
-                          if (v == 'logout') {
-                            await AuthService.signOut();
-                            if (context.mounted) context.goNamed('splash');
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          PopupMenuItem(
-                            value: 'logout',
-                            child: Row(children: [
-                              Icon(Icons.logout_rounded,
-                                  color: onSurfaceMute, size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Sign Out'),
-                            ]),
-                          ),
-                        ],
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: surfaceHigh,
-                          child: Icon(Icons.person, color: primary, size: 20),
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    onPressed: () => _showNotificationsSheet(context),
+                    icon: Icon(Icons.notifications_outlined,
+                        color: onSurfaceMute, size: 22),
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                  const SizedBox(width: 4),
+                  IslaProfileAvatar(
+                    radius: 17,
+                    onTap: () => _showProfileSheet(context),
                   ),
                 ],
               ),
@@ -207,8 +299,6 @@ class AnalyticsScreen extends StatelessWidget {
                       (analytics['totalStudyTime'] as num? ?? 0).toInt();
                   final sessionCount =
                       (analytics['sessionCount'] as num? ?? 0).toInt();
-                  final streak =
-                      (analytics['streak'] as num? ?? 0).toInt();
 
                   return StreamBuilder<int>(
                     stream: _completedTasksStream(),
@@ -304,7 +394,7 @@ class AnalyticsScreen extends StatelessWidget {
                                                   gradient:
                                                       IslaColors.cyanToBlue,
                                                 ),
-                                                child: const Icon(Icons.person,
+                                                child: const Icon(Icons.person_rounded,
                                                     color: IslaColors
                                                         .onPrimaryContainer),
                                               ),
@@ -379,12 +469,18 @@ class AnalyticsScreen extends StatelessWidget {
                                               change: 'All time',
                                               positive: true,
                                             ),
-                                            _StatCard(
-                                              icon: Icons.local_fire_department_rounded,
-                                              label: 'Longest Streak',
-                                              value: streak > 0 ? '$streak days' : '\u2014',
-                                              change: streak > 0 ? 'New record \ud83d\udd25' : 'Start your streak',
-                                              positive: streak > 0,
+                                            StreamBuilder<int>(
+                                              stream: _streakStream(),
+                                              builder: (context, streakSnap) {
+                                                final streak = streakSnap.data ?? 0;
+                                                return _StatCard(
+                                                  icon: Icons.local_fire_department_rounded,
+                                                  label: 'Current Streak',
+                                                  value: streak > 0 ? '$streak days' : '\u2014',
+                                                  change: streak > 0 ? 'Keep it up! \ud83d\udd25' : 'Start your streak',
+                                                  positive: streak > 0,
+                                                );
+                                              },
                                             ),
                                           ],
                                         ),
@@ -393,7 +489,13 @@ class AnalyticsScreen extends StatelessWidget {
                                         const SizedBox(height: 18),
                                         _SectionLabel(label: 'Weekly Focus', isDark: isDark),
                                         const SizedBox(height: 10),
-                                        _WeeklyBarChart(totalMins: totalMins, isDark: isDark),
+                                        StreamBuilder<List<double>>(
+                                          stream: _weeklyHoursStream(),
+                                          builder: (context, weeklySnap) => _WeeklyBarChart(
+                                            weeklyHours: weeklySnap.data ?? List.filled(7, 0.0),
+                                            isDark: isDark,
+                                          ),
+                                        ),
                                         const SizedBox(height: 18),
                                         if (subjectMap.isNotEmpty) ...[
                                           _SectionLabel(label: 'Focus Distribution', isDark: isDark),
@@ -471,6 +573,31 @@ class AnalyticsScreen extends StatelessWidget {
                                           ),
                                         ],
                                         const SizedBox(height: 14),
+                                        // ── AI Tools stats ──────────────────────
+                                        StreamBuilder<Map<String, int>>(
+                                          stream: _aiStatsStream(),
+                                          builder: (context, aiSnap) {
+                                            final stats = aiSnap.data ?? {};
+                                            final s = stats['summaries'] ?? 0;
+                                            final f = stats['flashcards'] ?? 0;
+                                            final q = stats['quizzes'] ?? 0;
+                                            if (s + f + q == 0) return const SizedBox.shrink();
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                _SectionLabel(label: 'AI Tools Used', isDark: isDark),
+                                                const SizedBox(height: 10),
+                                                _AiStatsRow(
+                                                  summaries: s,
+                                                  flashcards: f,
+                                                  quizzes: q,
+                                                  isDark: isDark,
+                                                ),
+                                                const SizedBox(height: 14),
+                                              ],
+                                            );
+                                          },
+                                        ),
                                         // ── Marks section ──────────────────────────
                                         const _MarksSection(),
                                       ],
@@ -606,10 +733,10 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _WeeklyBarChart extends StatelessWidget {
-  final int totalMins;
+  final List<double> weeklyHours;
   final bool isDark;
 
-  const _WeeklyBarChart({required this.totalMins, required this.isDark});
+  const _WeeklyBarChart({required this.weeklyHours, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -617,15 +744,13 @@ class _WeeklyBarChart extends StatelessWidget {
     final cardBg = isDark ? const Color(0xFF111415) : const Color(0xFFFFFFFF);
     final onMute = isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
 
-    // Distribute totalMins across weekdays with a realistic pattern.
-    // When no data, show flat zero bars rather than fake fractional-hour blobs.
-    const weights = [0.19, 0.22, 0.18, 0.16, 0.13, 0.07, 0.05];
     const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final hasData = totalMins > 0;
-    final base = hasData ? totalMins.toDouble() : 0.0;
-    final values = weights.map((w) => (base * w / 60).clamp(0.0, 24.0)).toList();
+    final values = weeklyHours.length == 7
+        ? weeklyHours.map((h) => h.clamp(0.0, 24.0)).toList()
+        : List.filled(7, 0.0);
+    final hasData = values.any((v) => v > 0);
     final maxY = hasData
-        ? (values.reduce((a, b) => a > b ? a : b) * 1.25).clamp(0.5, 24.0)
+        ? (values.reduce((a, b) => a > b ? a : b) * 1.3).clamp(0.5, 24.0)
         : 4.0;
 
     return Container(
@@ -797,6 +922,71 @@ class _FocusDonutChart extends StatelessWidget {
   }
 }
 
+class _AiStatsRow extends StatelessWidget {
+  final int summaries;
+  final int flashcards;
+  final int quizzes;
+  final bool isDark;
+
+  const _AiStatsRow({
+    required this.summaries,
+    required this.flashcards,
+    required this.quizzes,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBg = isDark ? const Color(0xFF111415) : const Color(0xFFFFFFFF);
+    final primary = isDark ? IslaColors.primary : const Color(0xFF007E90);
+
+    Widget tile(IconData icon, String label, int count, Color color) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: primary.withValues(alpha: 0.12)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 6),
+              Text(
+                '$count',
+                style: GoogleFonts.manrope(
+                  color: isDark ? IslaColors.onSurface : const Color(0xFF0F1A1F),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        tile(Icons.notes_rounded, 'Summaries', summaries, const Color(0xFF10B981)),
+        const SizedBox(width: 8),
+        tile(Icons.style_rounded, 'Flashcards', flashcards, const Color(0xFF6366F1)),
+        const SizedBox(width: 8),
+        tile(Icons.quiz_rounded, 'Quizzes', quizzes, const Color(0xFFF59E0B)),
+      ],
+    );
+  }
+}
+
 class _SubjectRow extends StatelessWidget {
   final String subject;
   final double progress;
@@ -954,7 +1144,7 @@ class _MarksSection extends StatelessWidget {
                     TextButton.icon(
                       onPressed: () =>
                           _showAddMarkDialog(context, courseNames: courseNames),
-                      icon: const Icon(Icons.add_rounded, size: 18),
+                      icon: const Icon(Icons.add_rounded, size: 16),
                       label: const Text('Add Mark'),
                       style: TextButton.styleFrom(
                         foregroundColor: primary,
@@ -1273,7 +1463,7 @@ class _SubjectMarksCard extends StatelessWidget {
                 ],
                 IconButton(
                   icon: Icon(Icons.add_circle_outline_rounded,
-                      color: primary, size: 22),
+                      color: primary, size: 20),
                   tooltip: 'Add mark',
                   onPressed: onAddMark,
                 ),
@@ -1337,7 +1527,7 @@ class _SubjectMarksCard extends StatelessWidget {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, size: 16, color: onMute),
+                      icon: Icon(Icons.more_vert, size: 14, color: onMute),
                       onSelected: (v) {
                         if (v == 'delete') {
                           onDeleteMark(m['id'] as String);
@@ -1347,8 +1537,8 @@ class _SubjectMarksCard extends StatelessWidget {
                         const PopupMenuItem(
                           value: 'delete',
                           child: Row(children: [
-                            Icon(Icons.delete_rounded,
-                                size: 16, color: Colors.red),
+                            Icon(Icons.delete_outline_rounded,
+                                size: 14, color: Colors.red),
                             SizedBox(width: 8),
                             Text('Delete', style: TextStyle(color: Colors.red)),
                           ]),
@@ -1422,7 +1612,7 @@ class _CgpaCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(Icons.school_rounded,
-                        color: AppTheme.primaryColor, size: 28),
+                        color: AppTheme.primaryColor, size: 26),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1460,8 +1650,8 @@ class _CgpaCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded,
-                      color: textSecondary, size: 22),
+                  Icon(Icons.keyboard_arrow_right_rounded,
+                      color: textSecondary, size: 16),
                 ],
               ),
             ),

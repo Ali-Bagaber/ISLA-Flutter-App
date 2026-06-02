@@ -46,10 +46,12 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 widget.document['description'] ??
                 '')
             .toString(),
+        pageCount: (widget.document['pageCount'] as num?)?.toInt() ?? 0,
         onRetrying: () {
-          if (mounted)
+          if (mounted) {
             setState(() => _loadingMessage =
                 'AI is busy — retrying automatically, please wait...');
+          }
         },
       );
       if (mounted) {
@@ -96,14 +98,14 @@ class _SummaryScreenState extends State<SummaryScreen> {
               child: Chip(
                 label: const Text('Saved',
                     style: TextStyle(fontSize: 12, color: AppTheme.success)),
-                avatar: const Icon(Icons.check_circle_rounded,
-                    size: 14, color: AppTheme.success),
+                avatar: const Icon(Icons.check_circle_outline_rounded,
+                    size: 12, color: AppTheme.success),
                 backgroundColor: AppTheme.success.withValues(alpha: 0.1),
                 side: BorderSide.none,
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.copy_rounded),
+              icon: const Icon(Icons.copy_rounded, size: 18),
               tooltip: 'Copy',
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: _summary));
@@ -137,6 +139,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text('Generating Summary...', style: AppTheme.headingSmall),
+                    const SizedBox(height: 8),
+                    Text(_loadingMessage,
+                        style: AppTheme.bodySmall,
+                        textAlign: TextAlign.center),
                   ],
                 ),
               )
@@ -147,8 +153,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: AppTheme.error, size: 48),
+                          const Icon(Icons.error_outline_rounded,
+                              color: AppTheme.error, size: 44),
                           const SizedBox(height: 16),
                           Text(
                             _error!,
@@ -159,7 +165,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           const SizedBox(height: 24),
                           ElevatedButton.icon(
                             onPressed: _generate,
-                            icon: const Icon(Icons.refresh_rounded),
+                            icon: const Icon(Icons.sync_rounded, size: 16),
                             label: const Text('Try Again'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primaryColor,
@@ -187,8 +193,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.check_circle_rounded,
-                                  color: AppTheme.success),
+                              const Icon(Icons.check_circle_outline_rounded,
+                                  color: AppTheme.success, size: 20),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -251,7 +257,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                   side: const BorderSide(
                                       color: AppTheme.primaryColor),
                                 ),
-                                icon: const Icon(Icons.refresh_rounded),
+                                icon: const Icon(Icons.sync_rounded, size: 16),
                                 label: const Text('Regenerate'),
                               ),
                             ),

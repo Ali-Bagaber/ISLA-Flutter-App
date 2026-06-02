@@ -84,6 +84,19 @@ class AuthService {
     }
   }
 
+  static Future<String?> sendPasswordReset(String email) async {
+    final auth = _auth;
+    if (auth == null) return 'Firebase not configured.';
+    try {
+      await auth.sendPasswordResetEmail(email: email.trim());
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _friendlyMessage(e.code);
+    } catch (_) {
+      return 'Failed to send reset email. Please try again.';
+    }
+  }
+
   /// Sign in with email + password
   static Future<String?> signIn({
     required String email,

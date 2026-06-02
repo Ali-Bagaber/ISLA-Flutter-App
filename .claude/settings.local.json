@@ -6,7 +6,10 @@
       "Bash(rm -v \"core/domain/repositories/task_repository.dart\")",
       "Bash(rm -v \"core/domain/services/service_contracts.dart\")",
       "Bash(rm -v \"core/domain/models/task.dart\")",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Read(//c/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/font_awesome_flutter-10.12.0/**)",
+      "Bash(Select-String -Pattern \"family|asset|fonts\" -Context 0)",
+      "Bash(flutter emulators *)"
     ]
   }
 }

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -31,7 +32,13 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 200), _controller.forward);
     Future.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted) context.pushNamed('valueProposition');
+      if (!mounted) return;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        context.goNamed('app');
+      } else {
+        context.pushNamed('valueProposition');
+      }
     });
   }
 
@@ -43,26 +50,33 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: IslaColors.background,
+      backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Clean dark navy backdrop with a soft glow behind the logo —
-          // no competing lighthouse image, so the brand mark stands alone.
+          // Full-screen background image
+          Image.asset(
+            'assets/images/splash_background.png',
+            width: size.width,
+            height: size.height,
+            fit: BoxFit.cover,
+          ),
+          // Dark overlay so text stays legible
           Container(
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.15),
-                radius: 1.0,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF0B1F38),
-                  Color(0xFF030D1B),
+                  Colors.black.withValues(alpha: 0.15),
+                  Colors.black.withValues(alpha: 0.55),
                 ],
               ),
             ),
           ),
-          // Content
+          // Content — centred with logo + text
           Center(
             child: FadeTransition(
               opacity: _fade,
@@ -72,9 +86,9 @@ class _SplashScreenState extends State<SplashScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Image.asset(
-                      'assets/images/isla_logo_1024.png',
-                      width: 110,
-                      height: 110,
+                      'assets/images/isla_logo_4k.png',
+                      width: 160,
+                      height: 160,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 20),
@@ -84,30 +98,30 @@ class _SplashScreenState extends State<SplashScreen>
                       child: Text(
                         'ISLA',
                         style: GoogleFonts.manrope(
-                          fontSize: 54,
+                          fontSize: 58,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 10,
+                          letterSpacing: 12,
                           color: Colors.white,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Text(
                       'Intelligent Study & Learning Assistant',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: IslaColors.onSurfaceVariant,
+                        color: Colors.white.withValues(alpha: 0.85),
                         letterSpacing: 0.3,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       'Focus.  Learn.  Track.  Grow.',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: IslaColors.primary.withValues(alpha: 0.7),
+                        color: IslaColors.primary.withValues(alpha: 0.90),
                         letterSpacing: 1.6,
                       ),
                     ),

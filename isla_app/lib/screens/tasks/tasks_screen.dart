@@ -5,9 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
-import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
 import '../planner/add_task_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -152,16 +153,16 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   IconData _dueIcon(DateTime? dueDate) {
-    if (dueDate == null) return Icons.event_rounded;
+    if (dueDate == null) return Icons.calendar_today_rounded;
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dueDay = DateTime(dueDate.year, dueDate.month, dueDate.day);
     final dayDiff = dueDay.difference(today).inDays;
 
-    if (dayDiff == 0) return Icons.schedule_rounded;
+    if (dayDiff == 0) return Icons.access_time_rounded;
     if (dayDiff == 1) return Icons.calendar_today_rounded;
-    return Icons.event_rounded;
+    return Icons.calendar_today_rounded;
   }
 
   String _monthShort(int month) {
@@ -221,10 +222,45 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  void _showNotificationsSheet() => showIslaNotificationsInbox(context);
+
+  void _showProfileSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline_rounded),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.read<NavController>().goTo(6);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const Text('Sign Out'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await AuthService.signOut();
+                if (mounted) context.goNamed('splash');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final palette = _TaskPalette.fromTheme(theme);
 
     return Scaffold(
@@ -247,50 +283,18 @@ class _TasksScreenState extends State<TasksScreen> {
                 children: [
                   const IslaLogo(markSize: 28, textSize: 17),
                   const Spacer(),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: () {
-                          context.read<ThemeProvider>().setDarkMode(!isDark);
-                        },
-                        icon: Icon(
-                          isDark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
-                          color: palette.onSurfaceMute,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        onSelected: (v) async {
-                          if (v == 'logout') {
-                            await AuthService.signOut();
-                            if (context.mounted) context.goNamed('splash');
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          PopupMenuItem(
-                            value: 'logout',
-                            child: Row(children: [
-                              Icon(Icons.logout_rounded,
-                                  color: palette.onSurfaceMute, size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Sign Out'),
-                            ]),
-                          ),
-                        ],
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: palette.surfaceHigh,
-                          child: Icon(
-                            Icons.person,
-                            color: palette.primary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    onPressed: _showNotificationsSheet,
+                    icon: Icon(Icons.notifications_outlined,
+                        color: palette.onSurfaceMute, size: 22),
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                  const SizedBox(width: 4),
+                  IslaProfileAvatar(
+                    radius: 17,
+                    onTap: _showProfileSheet,
                   ),
                 ],
               ),
@@ -417,7 +421,7 @@ class _TasksScreenState extends State<TasksScreen> {
             ),
           ],
         ),
-        child: Icon(Icons.add_rounded, size: 32, color: palette.fabIcon),
+        child: Icon(Icons.add_rounded, size: 28, color: palette.fabIcon),
       ),
     );
   }
@@ -590,7 +594,7 @@ class _TaskCard extends StatelessWidget {
                       : Icons.radio_button_unchecked_rounded,
                   color:
                       task.completed ? palette.primary : palette.onSurfaceMute,
-                  size: 30,
+                  size: 26,
                 ),
               ),
             ),
@@ -621,7 +625,7 @@ class _TaskCard extends StatelessWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Icon(dueIcon, color: palette.primary, size: 20),
+                      Icon(dueIcon, color: palette.primary, size: 16),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
@@ -723,7 +727,7 @@ class _TaskCard extends StatelessWidget {
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
-        child: const Icon(Icons.delete_rounded, color: Colors.white, size: 28),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
       ),
       child: cardWidget,
     );
@@ -749,9 +753,9 @@ class _EmptyTasksCard extends StatelessWidget {
       child: Column(
         children: [
           Icon(
-            showCompleted ? Icons.done_all_rounded : Icons.task_alt_rounded,
+            showCompleted ? Icons.done_all_rounded : Icons.checklist_rounded,
             color: palette.primary,
-            size: 30,
+            size: 26,
           ),
           const SizedBox(height: 8),
           Text(

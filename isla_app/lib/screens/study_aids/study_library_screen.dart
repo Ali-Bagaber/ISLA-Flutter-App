@@ -18,6 +18,14 @@ class StudyLibraryScreen extends StatefulWidget {
 class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
   String _selectedTab = 'All';
   final Set<String> _collapsed = {};
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   final List<String> _tabs = ['All', 'Summary', 'Flashcards', 'Quiz'];
 
@@ -82,9 +90,18 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
               ? allMaterials
               : allMaterials.where((m) => m['type'] == _selectedTab).toList();
 
+          // Apply search
+          final sq = _searchQuery.toLowerCase();
+          final searchFiltered = sq.isEmpty
+              ? filtered
+              : filtered.where((m) =>
+                  (m['title'] as String? ?? '').toLowerCase().contains(sq) ||
+                  (m['subject'] as String? ?? '').toLowerCase().contains(sq) ||
+                  (m['documentTitle'] as String? ?? '').toLowerCase().contains(sq)).toList();
+
           // Group by subject/course
           final Map<String, List<Map<String, dynamic>>> grouped = {};
-          for (final m in filtered) {
+          for (final m in searchFiltered) {
             final sub = (m['subject'] as String? ?? '').trim();
             final key = sub.isEmpty ? 'Other' : sub;
             grouped.putIfAbsent(key, () => []).add(m);
@@ -96,8 +113,34 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
             child: Column(
               children: [
                 _buildTabsBar(isDark),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search study materials…',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                    ),
+                  ),
+                ),
                 Expanded(
-                  child: filtered.isEmpty
+                  child: searchFiltered.isEmpty
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(32),
@@ -133,7 +176,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                               sliver: SliverToBoxAdapter(
                                 child: Text(
-                                  '${filtered.length} item${filtered.length == 1 ? '' : 's'}',
+                                  '${searchFiltered.length} item${searchFiltered.length == 1 ? '' : 's'}',
                                   style: AppTheme.bodySmall.copyWith(
                                       color: AppTheme.getTextSecondary(isDark)),
                                 ),
@@ -331,7 +374,7 @@ class _CourseGroupCard extends StatelessWidget {
                       color: color.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.folder_rounded, color: color, size: 22),
+                    child: Icon(Icons.folder_rounded, color: color, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -425,8 +468,8 @@ class _CourseGroupCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        Icon(Icons.chevron_right_rounded,
-                            color: AppTheme.getTextLight(isDark), size: 20),
+                        Icon(Icons.keyboard_arrow_right_rounded,
+                            color: AppTheme.getTextLight(isDark), size: 14),
                       ],
                     ),
                   ),
@@ -461,8 +504,8 @@ class _SavedSummaryView extends StatelessWidget {
             child: Chip(
               label: const Text('Saved',
                   style: TextStyle(fontSize: 12, color: AppTheme.success)),
-              avatar: const Icon(Icons.check_circle_rounded,
-                  size: 14, color: AppTheme.success),
+              avatar: const Icon(Icons.check_circle_outline_rounded,
+                  size: 12, color: AppTheme.success),
               backgroundColor: AppTheme.success.withValues(alpha: 0.1),
               side: BorderSide.none,
             ),
@@ -484,7 +527,7 @@ class _SavedSummaryView extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.summarize_rounded,
+                    const Icon(Icons.description_rounded,
                         color: AppTheme.success),
                     const SizedBox(width: 12),
                     Expanded(
@@ -564,8 +607,8 @@ class _SavedFlashcardsViewState extends State<_SavedFlashcardsView> {
             child: Chip(
               label: const Text('Saved',
                   style: TextStyle(fontSize: 11, color: AppTheme.success)),
-              avatar: const Icon(Icons.check_circle_rounded,
-                  size: 13, color: AppTheme.success),
+              avatar: const Icon(Icons.check_circle_outline_rounded,
+                  size: 11, color: AppTheme.success),
               backgroundColor: AppTheme.success.withValues(alpha: 0.1),
               side: BorderSide.none,
             ),
@@ -675,7 +718,7 @@ class _SavedFlashcardsViewState extends State<_SavedFlashcardsView> {
                                 _showAnswer = false;
                               })
                           : null,
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 16),
                       label: const Text('Previous'),
                     ),
                   ),
@@ -688,7 +731,7 @@ class _SavedFlashcardsViewState extends State<_SavedFlashcardsView> {
                                 _showAnswer = false;
                               })
                           : null,
-                      icon: const Icon(Icons.arrow_forward_rounded),
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                       label: const Text('Next'),
                       style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,

@@ -79,9 +79,16 @@ class TaskService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Schedule a local reminder whose lead time scales with priority
-    // (High → 24h, Medium → 12h, Low → 6h). See NotificationService for details.
+    // Advance reminder (fires before due time).
     await NotificationService.instance.scheduleTaskReminder(
+      taskId: ref.id,
+      title: title,
+      subject: subject,
+      dueDate: dueDate,
+      priority: priority,
+    );
+    // At-due-time alarm — sound intensity scales with priority.
+    await NotificationService.instance.scheduleDueTimeAlarm(
       taskId: ref.id,
       title: title,
       subject: subject,
@@ -101,6 +108,11 @@ class TaskService {
       'completedAt': completed ? FieldValue.serverTimestamp() : null,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    // Cancel both alarms when task is marked complete.
+    if (completed) {
+      await NotificationService.instance.cancelTaskReminder(id);
+      await NotificationService.instance.cancelDueTimeAlarm(id);
+    }
   }
 
   /// Update an existing task
@@ -127,8 +139,16 @@ class TaskService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Re-schedule reminder for the (possibly new) due date / priority.
+    // Re-schedule advance reminder.
     await NotificationService.instance.scheduleTaskReminder(
+      taskId: id,
+      title: title,
+      subject: subject,
+      dueDate: dueDate,
+      priority: priority,
+    );
+    // Re-schedule at-due-time alarm.
+    await NotificationService.instance.scheduleDueTimeAlarm(
       taskId: id,
       title: title,
       subject: subject,
@@ -141,6 +161,7 @@ class TaskService {
   static Future<void> deleteTask(String id) async {
     if (_userId == null) return;
     await NotificationService.instance.cancelTaskReminder(id);
+    await NotificationService.instance.cancelDueTimeAlarm(id);
     await _col?.doc(id).delete();
   }
 }

@@ -2,9 +2,11 @@
 import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../services/document_service.dart';
 import '../study_aids/summary_screen.dart';
 import '../study_aids/flashcards_screen.dart';
 import '../study_aids/quiz_screen.dart';
@@ -53,8 +55,55 @@ class DocumentDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Document Details'),
         actions: [
-          IconButton(icon: const Icon(Icons.share_rounded), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, size: 18),
+            onPressed: () {
+              final url = ((document['fileUrl'] ?? document['downloadUrl']) as String?) ?? '';
+              if (url.isNotEmpty) {
+                Clipboard.setData(ClipboardData(text: url));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Document link copied to clipboard')),
+                );
+              }
+            },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 18),
+            onSelected: (action) async {
+              if (action == 'delete') {
+                final docId = ((document['id'] ?? document['documentId']) as String?) ?? '';
+                if (docId.isEmpty) return;
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Delete Document'),
+                    content: Text('Delete "${document['title']}"? This cannot be undone.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true && context.mounted) {
+                  await DocumentService.deleteDocument(docId);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'delete', child: Row(
+                children: [
+                  Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
+                  SizedBox(width: 10),
+                  Text('Delete', style: TextStyle(color: AppTheme.error)),
+                ],
+              )),
+            ],
+          ),
         ],
       ),
       body: Container(
@@ -105,19 +154,19 @@ class DocumentDetailScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       _InfoRow(
-                        icon: Icons.folder_outlined,
+                        icon: Icons.folder_rounded,
                         label: 'Subject',
                         value: document['subject'] as String? ?? '—',
                       ),
                       const Divider(height: 24),
                       _InfoRow(
-                        icon: Icons.calendar_today_outlined,
+                        icon: Icons.calendar_today_rounded,
                         label: 'Uploaded',
                         value: _formatDate(),
                       ),
                       const Divider(height: 24),
                       _InfoRow(
-                        icon: Icons.insert_drive_file_outlined,
+                        icon: Icons.description_rounded,
                         label: 'File Type',
                         value: document['type'] as String? ?? '—',
                       ),
@@ -155,7 +204,7 @@ class DocumentDetailScreen extends StatelessWidget {
                       side: BorderSide(color: color),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    icon: const Icon(Icons.draw_rounded),
+                    icon: const Icon(Icons.edit_rounded, size: 18),
                     label: const Text(
                       'Annotate / Draw',
                       style:
@@ -190,7 +239,7 @@ class DocumentDetailScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _StudyAidCard(
-                      icon: Icons.summarize_rounded,
+                      icon: Icons.description_rounded,
                       title: 'Generate Summary',
                       description: 'Create an extractive summary of key points',
                       color: const Color(0xFF10B981),
@@ -205,7 +254,7 @@ class DocumentDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _StudyAidCard(
-                      icon: Icons.style_rounded,
+                      icon: Icons.layers_rounded,
                       title: 'Generate Flashcards',
                       description: 'Create Q&A flashcards for revision',
                       color: const Color(0xFF8B5CF6),
@@ -221,7 +270,7 @@ class DocumentDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _StudyAidCard(
-                      icon: Icons.quiz_rounded,
+                      icon: Icons.help_outline_rounded,
                       title: 'Generate Quiz',
                       description: 'Test your knowledge with MCQ questions',
                       color: const Color(0xFFF59E0B),
@@ -259,7 +308,7 @@ class DocumentDetailScreen extends StatelessWidget {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    icon: const Icon(Icons.open_in_new_rounded),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
                     label: const Text(
                       'Open Document',
                       style:
@@ -293,7 +342,7 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: AppTheme.textSecondary, size: 20),
+        Icon(icon, color: AppTheme.textSecondary, size: 16),
         const SizedBox(width: 12),
         Text(
           label,
@@ -344,7 +393,7 @@ class _StudyAidCard extends StatelessWidget {
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color),
+                child: Icon(icon, color: color, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -357,7 +406,7 @@ class _StudyAidCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: color),
+              Icon(Icons.keyboard_arrow_right_rounded, color: color, size: 14),
             ],
           ),
         ),

@@ -3,15 +3,19 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../services/auth_service.dart';
 import '../../services/document_service.dart';
 import '../../services/gemini_checklist_service.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/nav_controller.dart';
 import '../../services/notification_service.dart';
 import '../../services/user_settings_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -365,7 +369,7 @@ class _TimerScreenState extends State<TimerScreen>
 
   bool _completeNextChecklistItem() {
     for (final item in _checklist) {
-      if (item.isSelected && !item.isCompleted) {
+      if (item.isSelected && !item.isCompleted && !item.isSkipped) {
         item.isCompleted = true;
         _startChecklistCompletionMorph(item.id);
         _recentlyCompletedItemId = item.id;
@@ -380,7 +384,7 @@ class _TimerScreenState extends State<TimerScreen>
   int _nextChecklistIndex({int start = 0}) {
     for (var i = max(0, start); i < _checklist.length; i++) {
       final item = _checklist[i];
-      if (item.isSelected && !item.isCompleted) {
+      if (item.isSelected && !item.isCompleted && !item.isSkipped) {
         return i;
       }
     }
@@ -393,7 +397,7 @@ class _TimerScreenState extends State<TimerScreen>
 
   int _completedSelectedChecklistCount() {
     return _checklist
-        .where((item) => item.isSelected && item.isCompleted)
+        .where((item) => item.isSelected && (item.isCompleted || item.isSkipped))
         .length;
   }
 
@@ -401,6 +405,38 @@ class _TimerScreenState extends State<TimerScreen>
     final selectedCount = _selectedChecklistCount();
     if (selectedCount == 0) return false;
     return _completedSelectedChecklistCount() == selectedCount;
+  }
+
+  Future<void> _skipChecklistItem(int index) async {
+    final item = _checklist[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Skip this task?'),
+        content: Text('"${item.title}" will be marked as skipped.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Skip',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      item.isSkipped = true;
+      if (!_allSelectedChecklistDone()) {
+        _cancelAllTasksSuccessTimers();
+        _showAllTasksSuccessPulse = false;
+        _showAllTasksSuccessCheck = false;
+      }
+      _refreshChecklistFocus();
+    });
   }
 
   void _refreshChecklistFocus() {
@@ -995,6 +1031,42 @@ class _TimerScreenState extends State<TimerScreen>
     return (_currentSeconds / _phaseTotalSeconds).clamp(0.0, 1.0);
   }
 
+  void _showNotificationsSheet() => showIslaNotificationsInbox(context);
+
+  void _showProfileSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.read<NavController>().goTo(6);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const Text('Sign Out'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await AuthService.signOut();
+                if (mounted) context.goNamed('splash');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
@@ -1016,14 +1088,14 @@ class _TimerScreenState extends State<TimerScreen>
               surfaceTintColor: Colors.transparent,
               automaticallyImplyLeading: false,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
                 onPressed: _goBackInFlow,
               ),
               title: Text(_titleForStep()),
               actions: _flowStep == _SessionFlowStep.timer
                   ? [
                       IconButton(
-                        icon: const Icon(Icons.settings_outlined),
+                        icon: const Icon(Icons.settings_outlined, size: 18),
                         onPressed: _showSessionOptions,
                       ),
                     ]
@@ -1140,8 +1212,8 @@ class _TimerScreenState extends State<TimerScreen>
                       ),
                       child: Center(
                         child: isDone
-                            ? const Icon(Icons.check,
-                                size: 12, color: Colors.white)
+                            ? const Icon(Icons.check_rounded,
+                                size: 10, color: Colors.white)
                             : Text(
                                 '${index + 1}',
                                 style: TextStyle(
@@ -1195,19 +1267,15 @@ class _TimerScreenState extends State<TimerScreen>
           _sessionSubjectController.text.trim();
       final docSubject = (_linkedDoc?['subject'] as String?) ??
           _sessionSubjectController.text.trim();
+      // Use extracted file text when available; otherwise pass empty string
+      // so generateQuiz falls back to general subject-based questions.
       final extracted = (_linkedDoc?['extractedText'] as String? ?? '').trim();
-      final goal = _goalController.text.trim();
-      final source = extracted.isNotEmpty
-          ? extracted
-          : (goal.isNotEmpty
-              ? 'Study goal: $goal'
-              : (_sourceController.text.trim()));
 
       final qs = await GeminiStudyService().generateQuiz(
         title: docTitle.isEmpty ? 'this session' : docTitle,
         subject: docSubject.isEmpty ? 'General' : docSubject,
         count: 3,
-        documentText: source,
+        documentText: extracted,
       );
       if (!mounted) return;
       setState(() {
@@ -1467,8 +1535,8 @@ class _TimerScreenState extends State<TimerScreen>
               children: [
                 Row(
                   children: const [
-                    Icon(Icons.quiz_outlined,
-                        color: AppTheme.primaryColor, size: 22),
+                    Icon(Icons.help_outline_rounded,
+                        color: AppTheme.primaryColor, size: 20),
                     SizedBox(width: 8),
                     Text(
                       'Quick Check',
@@ -1516,8 +1584,8 @@ class _TimerScreenState extends State<TimerScreen>
               ),
               child: Column(
                 children: [
-                  const Icon(Icons.error_outline,
-                      color: AppTheme.error, size: 32),
+                  const Icon(Icons.error_outline_rounded,
+                      color: AppTheme.error, size: 30),
                   const SizedBox(height: 8),
                   Text(_verifyError!,
                       textAlign: TextAlign.center,
@@ -1533,7 +1601,7 @@ class _TimerScreenState extends State<TimerScreen>
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
                         onPressed: _loadVerifyQuestions,
-                        icon: const Icon(Icons.refresh_rounded),
+                        icon: const Icon(Icons.sync_rounded, size: 16),
                         label: const Text('Retry'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
@@ -1652,7 +1720,7 @@ class _TimerScreenState extends State<TimerScreen>
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    icon: const Icon(Icons.check_circle_outline_rounded),
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
                     label: Text(allAnswered
                         ? 'Submit & See Score'
                         : 'Answer ${_verifyQuestions.length - _verifyAnswers.length} more'),
@@ -1815,22 +1883,24 @@ class _TimerScreenState extends State<TimerScreen>
   }
 
   int _sessionFocusScore(Map<String, dynamic> session) {
+    final stored = (session['focusScore'] as num?)?.toInt();
+    if (stored != null && stored > 0) return stored;
+
+    // Fallback for legacy sessions without a stored score.
     final done = _toInt(session['checklistDone']);
     final total = _toInt(session['checklistTotal']);
     final cycles = _toInt(session['cycles']);
-    final focusMinutes = _toInt(session['focusMinutes']);
-
-    final checklistRatio = total > 0 ? (done / total).clamp(0.0, 1.0) : 0.6;
-    final score = 62 +
-        (checklistRatio * 24).round() +
-        (min(cycles, 4) * 3) +
-        (focusMinutes >= 120
-            ? 4
-            : focusMinutes >= 60
-                ? 2
-                : 0);
-
-    return score.clamp(55, 99).toInt();
+    final verifiedCorrect = _toInt(session['verifiedCorrect']);
+    final verifiedTotal = _toInt(session['verifiedTotal']);
+    final checklistRatio = total > 0 ? (done / total).clamp(0.0, 1.0) : 0.0;
+    final verifyRatio = verifiedTotal > 0
+        ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0)
+        : 0.0;
+    return (10 +
+            min(cycles, 4) * 10 +
+            (checklistRatio * 20).round() +
+            (verifyRatio * 30).round())
+        .clamp(0, 100);
   }
 
   Widget _buildSessionHistoryCard({
@@ -1973,10 +2043,22 @@ class _TimerScreenState extends State<TimerScreen>
         children: [
           const SizedBox(height: 8),
           Row(
-            children: const [
-              IslaLogo(),
-              Spacer(),
-              IslaProfileAvatar(),
+            children: [
+              const IslaLogo(markSize: 28, textSize: 17),
+              const Spacer(),
+              IconButton(
+                onPressed: _showNotificationsSheet,
+                icon: Icon(Icons.notifications_outlined,
+                    color: AppTheme.getTextSecondary(isDark), size: 20),
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+              const SizedBox(width: 4),
+              IslaProfileAvatar(
+                radius: 17,
+                onTap: _showProfileSheet,
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -2322,7 +2404,7 @@ class _TimerScreenState extends State<TimerScreen>
                         value: validVal,
                         decoration: const InputDecoration(
                           labelText: 'Session subject (optional)',
-                          prefixIcon: Icon(Icons.book_outlined),
+                          prefixIcon: Icon(Icons.book_outlined, size: 18),
                         ),
                         items: items,
                         onChanged: (v) {
@@ -2402,7 +2484,7 @@ class _TimerScreenState extends State<TimerScreen>
                             GestureDetector(
                               onTap: () => setState(() => _linkedDoc = null),
                               child: Icon(Icons.close_rounded,
-                                  size: 16,
+                                  size: 14,
                                   color: AppTheme.getTextSecondary(isDark)),
                             ),
                         ],
@@ -2442,7 +2524,7 @@ class _TimerScreenState extends State<TimerScreen>
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                icon: const Icon(Icons.arrow_forward_rounded),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                 label: const Text('Continue to Checklist'),
               ),
             ),
@@ -2468,7 +2550,7 @@ class _TimerScreenState extends State<TimerScreen>
                 child: _HoverLift(
                   child: OutlinedButton.icon(
                     onPressed: _goBackInFlow,
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: const Icon(Icons.arrow_back_rounded, size: 16),
                     label: const Text('Back'),
                   ),
                 ),
@@ -2483,7 +2565,7 @@ class _TimerScreenState extends State<TimerScreen>
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    icon: const Icon(Icons.timer_rounded),
+                    icon: const Icon(Icons.timer_rounded, size: 18),
                     label: const Text('Continue to Focus Timer'),
                   ),
                 ),
@@ -2615,7 +2697,7 @@ class _TimerScreenState extends State<TimerScreen>
         ),
         foregroundColor: AppTheme.primaryColor,
       ),
-      icon: const Icon(Icons.logout_rounded, size: 18),
+      icon: const Icon(Icons.logout_rounded, size: 16),
       label: const Text(
         'Exit Focus Mode',
         style: TextStyle(fontWeight: FontWeight.w600),
@@ -2883,7 +2965,7 @@ class _TimerScreenState extends State<TimerScreen>
                       _setFlowStep(_SessionFlowStep.list);
                     });
                   },
-                  icon: const Icon(Icons.list_alt_rounded),
+                  icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
                   label: const Text('Back to Sessions'),
                 ),
               ),
@@ -2902,7 +2984,7 @@ class _TimerScreenState extends State<TimerScreen>
                     backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
                   ),
-                  icon: const Icon(Icons.add_rounded),
+                  icon: const Icon(Icons.add_rounded, size: 16),
                   label: const Text('One More Cycle'),
                 ),
               ),
@@ -3399,7 +3481,7 @@ class _TimerScreenState extends State<TimerScreen>
                 onPressed: _currentSeconds > 60
                     ? () => _adjustRemainingTime(-5)
                     : null,
-                icon: const Icon(Icons.remove_rounded),
+                icon: const Icon(Icons.remove_rounded, size: 14),
                 label: const Text('-5 min'),
               ),
             ),
@@ -3412,7 +3494,7 @@ class _TimerScreenState extends State<TimerScreen>
                       AppTheme.primaryColor.withValues(alpha: 0.92),
                   foregroundColor: Colors.white,
                 ),
-                icon: const Icon(Icons.add_rounded),
+                icon: const Icon(Icons.add_rounded, size: 14),
                 label: const Text('+5 min'),
               ),
             ),
@@ -3486,7 +3568,7 @@ class _TimerScreenState extends State<TimerScreen>
                 value: validVal,
                 decoration: const InputDecoration(
                   labelText: 'Session subject (optional)',
-                  prefixIcon: Icon(Icons.book_outlined),
+                  prefixIcon: Icon(Icons.book_outlined, size: 18),
                 ),
                 items: items,
                 onChanged: (v) {
@@ -3536,7 +3618,7 @@ class _TimerScreenState extends State<TimerScreen>
                             valueColor: AlwaysStoppedAnimation(Colors.white),
                           ),
                         )
-                      : const Icon(Icons.auto_awesome_rounded),
+                      : const Icon(Icons.auto_fix_high_rounded, size: 16),
                   label: Text(
                     _isGeneratingChecklist
                         ? 'Analyzing with AI...'
@@ -3552,7 +3634,7 @@ class _TimerScreenState extends State<TimerScreen>
                   onPressed: _isGeneratingChecklist
                       ? null
                       : () => _generateChecklist(isRetry: true),
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const Icon(Icons.sync_rounded, size: 16),
                   label: const Text('Retry'),
                 ),
               ),
@@ -3724,7 +3806,7 @@ class _TimerScreenState extends State<TimerScreen>
               const SizedBox(width: 8),
               IconButton(
                 onPressed: _addManualChecklistItem,
-                icon: const Icon(Icons.add_circle_rounded),
+                icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
                 color: AppTheme.primaryColor,
               ),
             ],
@@ -3778,7 +3860,8 @@ class _TimerScreenState extends State<TimerScreen>
       final item = _checklist[index];
       final isFocused = index == _activeChecklistIndex &&
           item.isSelected &&
-          !item.isCompleted;
+          !item.isCompleted &&
+          !item.isSkipped;
       final isRecent = _recentlyCompletedItemId == item.id;
 
       return TweenAnimationBuilder<double>(
@@ -3806,23 +3889,30 @@ class _TimerScreenState extends State<TimerScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    (item.isCompleted
-                            ? AppTheme.success
-                            : AppTheme.primaryColor)
+                    (item.isSkipped
+                            ? AppTheme.getTextSecondary(isDark)
+                            : item.isCompleted
+                                ? AppTheme.success
+                                : AppTheme.primaryColor)
                         .withValues(
-                      alpha:
-                          item.isCompleted ? 0.14 : (isFocused ? 0.12 : 0.06),
+                      alpha: item.isSkipped
+                          ? 0.06
+                          : item.isCompleted
+                              ? 0.14
+                              : (isFocused ? 0.12 : 0.06),
                     ),
                     AppTheme.getSurfaceColor(isDark).withValues(alpha: 0.48),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: item.isCompleted
-                      ? AppTheme.success.withValues(alpha: 0.38)
-                      : (isFocused
-                          ? AppTheme.primaryColor
-                          : AppTheme.primaryColor.withValues(alpha: 0.18)),
+                  color: item.isSkipped
+                      ? AppTheme.getTextSecondary(isDark).withValues(alpha: 0.22)
+                      : item.isCompleted
+                          ? AppTheme.success.withValues(alpha: 0.38)
+                          : (isFocused
+                              ? AppTheme.primaryColor
+                              : AppTheme.primaryColor.withValues(alpha: 0.18)),
                   width: isFocused ? 1.5 : 1,
                 ),
                 boxShadow: isRecent
@@ -3854,23 +3944,27 @@ class _TimerScreenState extends State<TimerScreen>
                 title: Text(
                   item.title,
                   style: AppTheme.bodyMedium.copyWith(
-                    decoration: item.isCompleted
+                    decoration: (item.isCompleted || item.isSkipped)
                         ? TextDecoration.lineThrough
                         : TextDecoration.none,
-                    color: item.isCompleted
+                    color: (item.isCompleted || item.isSkipped)
                         ? AppTheme.getTextSecondary(isDark)
                         : AppTheme.getTextPrimary(isDark),
                   ),
                 ),
-                subtitle: item.isCompleted || isFocused
+                subtitle: item.isSkipped || item.isCompleted || isFocused
                     ? Text(
-                        item.isCompleted
-                            ? 'Completed'
-                            : (_isRunning ? 'In progress' : 'Ready to start'),
+                        item.isSkipped
+                            ? 'Skipped'
+                            : item.isCompleted
+                                ? 'Completed'
+                                : (_isRunning ? 'In progress' : 'Ready to start'),
                         style: AppTheme.bodySmall.copyWith(
-                          color: isFocused
-                              ? AppTheme.primaryColor
-                              : AppTheme.getTextSecondary(isDark),
+                          color: item.isSkipped
+                              ? AppTheme.getTextSecondary(isDark)
+                              : isFocused
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.getTextSecondary(isDark),
                           fontWeight:
                               isFocused ? FontWeight.w700 : FontWeight.w400,
                         ),
@@ -3879,34 +3973,44 @@ class _TimerScreenState extends State<TimerScreen>
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          item.isSelected = !item.isSelected;
-                          if (!item.isSelected) {
-                            item.isCompleted = false;
-                            _cancelChecklistMorphTimer(item.id);
-                          }
-                          if (!_allSelectedChecklistDone()) {
-                            _cancelAllTasksSuccessTimers();
-                            _showAllTasksSuccessPulse = false;
-                            _showAllTasksSuccessCheck = false;
-                          }
-                          _refreshChecklistFocus();
-                        });
-                      },
-                      icon: Icon(
-                        item.isSelected
-                            ? Icons.visibility_rounded
-                            : Icons.visibility_off_rounded,
-                        color: item.isSelected
-                            ? AppTheme.primaryColor
-                            : AppTheme.getTextSecondary(isDark),
+                    if (!item.isCompleted && !item.isSkipped)
+                      IconButton(
+                        onPressed: () => _skipChecklistItem(index),
+                        icon: Icon(
+                          Icons.skip_next_rounded,
+                          color: AppTheme.getTextSecondary(isDark),
+                        ),
+                        tooltip: 'Skip this task',
                       ),
-                      tooltip: item.isSelected
-                          ? 'Included in flow'
-                          : 'Excluded from flow',
-                    ),
+                    if (!item.isSkipped)
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            item.isSelected = !item.isSelected;
+                            if (!item.isSelected) {
+                              item.isCompleted = false;
+                              _cancelChecklistMorphTimer(item.id);
+                            }
+                            if (!_allSelectedChecklistDone()) {
+                              _cancelAllTasksSuccessTimers();
+                              _showAllTasksSuccessPulse = false;
+                              _showAllTasksSuccessCheck = false;
+                            }
+                            _refreshChecklistFocus();
+                          });
+                        },
+                        icon: Icon(
+                          item.isSelected
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                          color: item.isSelected
+                              ? AppTheme.primaryColor
+                              : AppTheme.getTextSecondary(isDark),
+                        ),
+                        tooltip: item.isSelected
+                            ? 'Included in flow'
+                            : 'Excluded from flow',
+                      ),
                     Padding(
                       padding: const EdgeInsets.all(8),
                       child: Icon(
@@ -4179,7 +4283,7 @@ class _TimerScreenState extends State<TimerScreen>
                   Navigator.pop(context);
                   _resetTimer();
                 },
-                icon: const Icon(Icons.refresh_rounded),
+                icon: const Icon(Icons.sync_rounded, size: 16),
                 label: const Text('Reset Session Progress'),
               ),
             ),
@@ -4195,6 +4299,7 @@ class _SessionChecklistItem {
   String title;
   bool isSelected = true;
   bool isCompleted = false;
+  bool isSkipped = false;
 
   _SessionChecklistItem({
     required this.id,

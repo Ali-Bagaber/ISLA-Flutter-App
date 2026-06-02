@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +23,14 @@ Future<void> main() async {
 
   if (FirebaseRuntimeConfig.isConfigured) {
     await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
+  }
+
+  // On web, Firestore's IndexedDB persistence (enabled by default in SDK 11.x)
+  // causes INTERNAL ASSERTION FAILED errors on the first write of a new session.
+  // Disabling it forces all ops through the network and avoids that bad state.
+  if (kIsWeb && Firebase.apps.isNotEmpty) {
+    FirebaseFirestore.instance.settings =
+        const Settings(persistenceEnabled: false);
   }
 
   await NotificationService.instance.init();

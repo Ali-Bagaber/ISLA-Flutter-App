@@ -68,6 +68,9 @@ dependencies:
   archive: ^3.6.1
   xml: ^6.5.0
 
+  # PDF rendering (page-by-page images for annotation)
+  pdfrx: ^1.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -82,6 +85,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+
 
 # ── App launcher icon (Android / iOS / Web) ───────────────────────────────────
 # Run: dart run flutter_launcher_icons

@@ -73,8 +73,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            Icons.arrow_back_ios,
+            Icons.arrow_back,
             color: AppTheme.getTextPrimary(isDark),
+            size: 18,
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -108,7 +109,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _nameController,
                     decoration: const InputDecoration(
                       hintText: 'Enter your full name',
-                      prefixIcon: Icon(Icons.person_outline),
+                      prefixIcon: Icon(Icons.person_outline, size: 18),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -128,7 +129,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       hintText: 'Enter your email',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      prefixIcon: Icon(Icons.email_outlined, size: 18),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -151,12 +152,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       hintText: 'Create a password',
-                      prefixIcon: const Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline, size: 18),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 18,
                         ),
                         onPressed: () {
                           setState(() => _obscurePassword = !_obscurePassword);
@@ -184,12 +186,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     obscureText: _obscureConfirmPassword,
                     decoration: InputDecoration(
                       hintText: 'Confirm your password',
-                      prefixIcon: const Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline, size: 18),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscureConfirmPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 18,
                         ),
                         onPressed: () {
                           setState(

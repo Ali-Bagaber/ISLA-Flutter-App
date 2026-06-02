@@ -211,7 +211,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   controller: _titleController,
                   decoration: const InputDecoration(
                     hintText: 'Enter task title',
-                    prefixIcon: Icon(Icons.title_rounded),
+                    prefixIcon: const Icon(Icons.title, size: 18),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -248,7 +248,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           ? _selectedSubject
                           : '',
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.book_outlined),
+                        prefixIcon: Icon(Icons.book_outlined, size: 18),
                       ),
                       items: items,
                       onChanged: (v) => setState(() => _selectedSubject = v),
@@ -264,7 +264,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _selectedType,
                   decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.category_outlined),
+                    prefixIcon: const Icon(Icons.folder_outlined, size: 18),
                   ),
                   items: _taskTypes.map((type) {
                     return DropdownMenuItem(value: type, child: Text(type));

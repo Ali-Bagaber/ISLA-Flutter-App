@@ -33,11 +33,15 @@ class GeminiStudyService {
 
   // ── Core request helper — Gemini → Groq → OpenRouter ───────────────────────
 
-  Future<String> _ask(String prompt, {void Function()? onRetrying}) async {
+  Future<String> _ask(
+    String prompt, {
+    void Function()? onRetrying,
+    int maxTokens = 1024,
+  }) async {
     // ── 1. Gemini ────────────────────────────────────────────────────────────
     if (AppConfig.hasGeminiKey) {
       try {
-        return await _callGemini(prompt);
+        return await _callGemini(prompt, maxTokens: maxTokens);
       } on DioException catch (e) {
         final code = e.response?.statusCode;
         // Auth errors → key is broken, don't try further providers
@@ -59,6 +63,7 @@ class GeminiStudyService {
           model: AppConfig.groqModel,
           apiKey: AppConfig.groqApiKey,
           prompt: prompt,
+          maxTokens: maxTokens,
         );
       } catch (_) {
         // Fall through to OpenRouter
@@ -73,6 +78,7 @@ class GeminiStudyService {
           model: AppConfig.openRouterModel,
           apiKey: AppConfig.openRouterApiKey,
           prompt: prompt,
+          maxTokens: maxTokens,
           extraHeaders: {'HTTP-Referer': 'https://isla.app'},
         );
       } catch (_) {
@@ -85,7 +91,7 @@ class GeminiStudyService {
     );
   }
 
-  Future<String> _callGemini(String prompt) async {
+  Future<String> _callGemini(String prompt, {int maxTokens = 1024}) async {
     final response = await _dio.post<Map<String, dynamic>>(
       _endpoint,
       queryParameters: {'key': AppConfig.geminiApiKey},
@@ -98,7 +104,7 @@ class GeminiStudyService {
             ]
           }
         ],
-        'generationConfig': {'temperature': 0.4, 'maxOutputTokens': 1024},
+        'generationConfig': {'temperature': 0.4, 'maxOutputTokens': maxTokens},
       },
       options: Options(
         sendTimeout: const Duration(seconds: 20),
@@ -122,6 +128,7 @@ class GeminiStudyService {
     required String model,
     required String apiKey,
     required String prompt,
+    int maxTokens = 1024,
     Map<String, String> extraHeaders = const {},
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
@@ -132,7 +139,7 @@ class GeminiStudyService {
           {'role': 'user', 'content': prompt}
         ],
         'temperature': 0.4,
-        'max_tokens': 1024,
+        'max_tokens': maxTokens,
       },
       options: Options(
         headers: {
@@ -157,47 +164,70 @@ class GeminiStudyService {
   }
 
   /// Trim long document content to keep request payload reasonable.
-  String _trimForPrompt(String text, {int maxChars = 12000}) {
+  String _trimForPrompt(String text, {int maxChars = 16000}) {
     final t = text.trim();
     if (t.length <= maxChars) return t;
     return '${t.substring(0, maxChars)}\n\n[...content truncated...]';
   }
 
+  // ── Summary length scaling ─────────────────────────────────────────────────
+
+  /// Infer page/slide count from extracted text when not stored explicitly.
+  static int _inferPageCount(String text) {
+    final markers = RegExp(r'^Slide \d+:', multiLine: true).allMatches(text).length;
+    if (markers > 0) return markers;
+    final chars = text.trim().length;
+    if (chars == 0) return 0;
+    return (chars / 1500).ceil().clamp(1, 100);
+  }
+
+  /// Returns {bullets, paragraphs, words, tokens} scaled to document length.
+  static ({int bullets, int paragraphs, int words, int tokens}) _summaryConfig(int pages) {
+    if (pages <= 0)  return (bullets: 5,  paragraphs: 2, words: 280,  tokens: 1024);
+    if (pages <= 5)  return (bullets: 5,  paragraphs: 2, words: 320,  tokens: 1024);
+    if (pages <= 15) return (bullets: 8,  paragraphs: 3, words: 480,  tokens: 1600);
+    if (pages <= 30) return (bullets: 10, paragraphs: 4, words: 650,  tokens: 2200);
+    if (pages <= 50) return (bullets: 12, paragraphs: 5, words: 850,  tokens: 2800);
+    return             (bullets: 15, paragraphs: 6, words: 1100, tokens: 3500);
+  }
+
   // ── Summary ────────────────────────────────────────────────────────────────
 
   /// Summary output style.
-  ///   - bullets   : 5-point numbered list (default; quick scanning).
-  ///   - paragraph : 2–3 detailed paragraphs explaining the material.
-  ///
-  /// Both styles are kept short enough to stay well under token limits.
+  ///   - bullets   : numbered list, count scales with document length.
+  ///   - paragraph : detailed paragraphs, count scales with document length.
   Future<String> generateSummary({
     required String title,
     required String subject,
     String documentText = '',
     String mode = 'bullets',
+    int pageCount = 0,
     void Function()? onRetrying,
   }) async {
     final hasText = documentText.trim().isNotEmpty;
     final wantParagraph = mode.toLowerCase() == 'paragraph';
 
+    final pages = pageCount > 0 ? pageCount : _inferPageCount(documentText);
+    final cfg = _summaryConfig(pages);
+
     final String prompt;
     if (wantParagraph) {
       prompt = hasText
           ? 'Summarize the following study material in clear paragraphs for a university student. '
-              'Write 2 to 3 detailed but concise paragraphs covering the main ideas, important '
+              'Write ${cfg.paragraphs} detailed paragraphs covering the main ideas, important '
               'explanations and key concepts. Use simple academic language. Do not use bullet '
-              'points or headings. Keep the whole answer under ~280 words.\n\n'
+              'points or headings. Aim for approximately ${cfg.words} words.\n\n'
               'Document title: "$title"\nSubject: $subject\n\n'
               'Content:\n${_trimForPrompt(documentText)}'
-          : 'Write a clear 2–3 paragraph summary of "$title" ($subject) for a university student, '
-              'covering the main ideas, important explanations and key concepts in simple academic '
-              'language. Do not use bullet points. Keep the whole answer under ~280 words.';
+          : 'Write a clear ${cfg.paragraphs}-paragraph summary of "$title" ($subject) for a '
+              'university student, covering the main ideas, important explanations and key concepts '
+              'in simple academic language. Do not use bullet points. Aim for ~${cfg.words} words.';
     } else {
       prompt = hasText
-          ? 'Summarize the following document for a university student. Give 5 key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1.".\n\nDocument title: "$title"\nSubject: $subject\n\nContent:\n${_trimForPrompt(documentText)}'
-          : 'Summarize the document "$title" ($subject) for a university student. Give 5 key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1."';
+          ? 'Summarize the following document for a university student. Give ${cfg.bullets} key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1.".\n\nDocument title: "$title"\nSubject: $subject\n\nContent:\n${_trimForPrompt(documentText)}'
+          : 'Summarize the document "$title" ($subject) for a university student. Give ${cfg.bullets} key points as a numbered list. Each point: 1-2 sentences. Plain text only, start with "1."';
     }
-    return await _ask(prompt, onRetrying: onRetrying);
+    return await _ask(prompt, onRetrying: onRetrying, maxTokens: cfg.tokens);
   }
 
   // ── Flashcards ─────────────────────────────────────────────────────────────

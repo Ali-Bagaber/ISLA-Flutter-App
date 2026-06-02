@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 
 /// Per-user app settings. Stored at user_settings/{userId}.
@@ -114,6 +115,9 @@ class UserSettingsService {
     final db = _db;
     final uid = _userId;
     if (db == null || uid == null) return;
+    // On web, force the network connection before writing to avoid the
+    // Firestore internal-assertion errors that occur on a fresh session.
+    if (kIsWeb) await db.enableNetwork();
     await db.collection('user_settings').doc(uid).set({
       'userId': uid,
       'studyPlan': {
@@ -125,6 +129,45 @@ class UserSettingsService {
         if (sessionMinutes != null) 'sessionMinutes': sessionMinutes,
         if (studyDays != null) 'studyDays': studyDays,
       },
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static const List<String> defaultSubjects = [
+    'Mathematics', 'Physics', 'Chemistry', 'Biology',
+    'Computer Science', 'Data Structures', 'Operating Systems',
+    'Database Systems', 'Software Engineering', 'English',
+    'Economics', 'Other',
+  ];
+
+  static Stream<List<String>> watchSubjects() {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return Stream.value(defaultSubjects);
+    return db.collection('user_settings').doc(uid).snapshots().map((snap) {
+      final raw = snap.data()?['subjects'];
+      if (raw is List && raw.isNotEmpty) return List<String>.from(raw);
+      return defaultSubjects;
+    });
+  }
+
+  static Future<List<String>> loadSubjects() async {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return defaultSubjects;
+    final snap = await db.collection('user_settings').doc(uid).get();
+    final raw = snap.data()?['subjects'];
+    if (raw is List && raw.isNotEmpty) return List<String>.from(raw);
+    return defaultSubjects;
+  }
+
+  static Future<void> saveSubjects(List<String> subjects) async {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return;
+    await db.collection('user_settings').doc(uid).set({
+      'userId': uid,
+      'subjects': subjects,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

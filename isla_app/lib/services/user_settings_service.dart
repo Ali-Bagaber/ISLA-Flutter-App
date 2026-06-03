@@ -24,7 +24,15 @@ class UserSettingsService {
       'taskReminders': true,
       'pomodoroAlerts': true,
       'streakReminder': true,
-      'streakHour': 20, // 8 PM
+      'streakHour': 20,
+      // Focus session granular alerts
+      'sessionStartAlert': true,
+      'sessionHalfAlert': false,
+      // Daily reminders
+      'morningReminder': false,
+      'morningHour': 8,
+      'eveningReminder': false,
+      'eveningHour': 20,
     },
     'focus': {
       'workMinutes': 25,
@@ -66,6 +74,12 @@ class UserSettingsService {
     bool? pomodoroAlerts,
     bool? streakReminder,
     int? streakHour,
+    bool? sessionStartAlert,
+    bool? sessionHalfAlert,
+    bool? morningReminder,
+    int? morningHour,
+    bool? eveningReminder,
+    int? eveningHour,
   }) async {
     final db = _db;
     final uid = _userId;
@@ -77,6 +91,12 @@ class UserSettingsService {
         if (pomodoroAlerts != null) 'pomodoroAlerts': pomodoroAlerts,
         if (streakReminder != null) 'streakReminder': streakReminder,
         if (streakHour != null) 'streakHour': streakHour,
+        if (sessionStartAlert != null) 'sessionStartAlert': sessionStartAlert,
+        if (sessionHalfAlert != null) 'sessionHalfAlert': sessionHalfAlert,
+        if (morningReminder != null) 'morningReminder': morningReminder,
+        if (morningHour != null) 'morningHour': morningHour,
+        if (eveningReminder != null) 'eveningReminder': eveningReminder,
+        if (eveningHour != null) 'eveningHour': eveningHour,
       },
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -159,6 +179,52 @@ class UserSettingsService {
     final raw = snap.data()?['subjects'];
     if (raw is List && raw.isNotEmpty) return List<String>.from(raw);
     return defaultSubjects;
+  }
+
+  // ── XP / Level ──────────────────────────────────────────────────────────────
+
+  // Level thresholds: index = level-1, value = XP required to reach that level.
+  static const List<int> _levelThresholds = [0, 100, 250, 450, 700, 1000];
+
+  static int levelFromXp(int xp) {
+    for (int i = _levelThresholds.length - 1; i >= 0; i--) {
+      if (xp >= _levelThresholds[i]) return i + 1;
+    }
+    return 1;
+  }
+
+  static int xpForLevel(int level) {
+    if (level <= _levelThresholds.length) return _levelThresholds[level - 1];
+    return 1000 + (level - _levelThresholds.length) * 300;
+  }
+
+  /// Add [amount] XP to the user's total (negative to subtract). Never drops
+  /// below 0. Returns the new {xp, level} map.
+  static Future<Map<String, int>> addXp(int amount) async {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return {'xp': 0, 'level': 1};
+    final doc = await db.collection('user_settings').doc(uid).get();
+    final current = (doc.data()?['xp'] as num?)?.toInt() ?? 0;
+    final newXp = (current + amount).clamp(0, 1 << 30);
+    final newLevel = levelFromXp(newXp);
+    await db.collection('user_settings').doc(uid).set({
+      'xp': newXp,
+      'level': newLevel,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return {'xp': newXp, 'level': newLevel};
+  }
+
+  /// Stream of {xp, level} for the current user.
+  static Stream<Map<String, int>> watchXp() {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return Stream.value({'xp': 0, 'level': 1});
+    return db.collection('user_settings').doc(uid).snapshots().map((snap) {
+      final xp = (snap.data()?['xp'] as num?)?.toInt() ?? 0;
+      return {'xp': xp, 'level': levelFromXp(xp)};
+    });
   }
 
   static Future<void> saveSubjects(List<String> subjects) async {

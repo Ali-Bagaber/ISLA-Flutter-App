@@ -60,12 +60,55 @@ class NotificationService {
       final androidImpl = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       await androidImpl?.requestNotificationsPermission();
-      await androidImpl?.requestExactAlarmsPermission();
+      final exact = await androidImpl?.requestExactAlarmsPermission();
+      _exactAlarmsAllowed = exact ?? false;
     } catch (_) {
       // Older Android versions don't have this — ignore.
     }
 
     _initialised = true;
+  }
+
+  /// Whether the user has granted the "Alarms & reminders" (exact alarm)
+  /// permission. When false we fall back to inexact scheduling so the
+  /// notification still fires (just possibly a few minutes late).
+  bool _exactAlarmsAllowed = false;
+
+  AndroidScheduleMode get _scheduleMode => _exactAlarmsAllowed
+      ? AndroidScheduleMode.exactAllowWhileIdle
+      : AndroidScheduleMode.inexactAllowWhileIdle;
+
+  /// Schedule [zonedSchedule] with exact mode, falling back to inexact if the
+  /// OS rejects the exact alarm (permission revoked at runtime).
+  Future<void> _safeZonedSchedule(
+    int id,
+    String title,
+    String body,
+    tz.TZDateTime when,
+    NotificationDetails details, {
+    required String payload,
+    DateTimeComponents? matchComponents,
+  }) async {
+    try {
+      await _plugin.zonedSchedule(
+        id, title, body, when, details,
+        androidScheduleMode: _scheduleMode,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: payload,
+        matchDateTimeComponents: matchComponents,
+      );
+    } catch (_) {
+      // Exact alarm denied at runtime — retry with inexact so it still fires.
+      await _plugin.zonedSchedule(
+        id, title, body, when, details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: payload,
+        matchDateTimeComponents: matchComponents,
+      );
+    }
   }
 
   // ── Task reminders ─────────────────────────────────────────────────────────
@@ -173,15 +216,12 @@ class NotificationService {
     }
 
     final scheduled = tz.TZDateTime.from(remindAt, tz.local);
-    await _plugin.zonedSchedule(
+    await _safeZonedSchedule(
       id,
       notifTitle,
       notifBody,
       scheduled,
       details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       payload: 'task:$taskId',
     );
   }
@@ -287,15 +327,12 @@ class NotificationService {
     }
 
     final scheduled = tz.TZDateTime.from(dueDate, tz.local);
-    await _plugin.zonedSchedule(
+    await _safeZonedSchedule(
       id,
       notifTitle,
       notifBody,
       scheduled,
       details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       payload: 'task:$taskId',
     );
   }
@@ -354,7 +391,7 @@ class NotificationService {
       firstFire = firstFire.add(const Duration(days: 1));
     }
 
-    await _plugin.zonedSchedule(
+    await _safeZonedSchedule(
       dailyStreakId,
       'Keep your streak alive',
       'Run one focus session today to hold your study streak.',
@@ -368,10 +405,8 @@ class NotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time, // repeat daily at HH:MM
+      payload: 'streak',
+      matchComponents: DateTimeComponents.time, // repeat daily at HH:MM
     );
   }
 

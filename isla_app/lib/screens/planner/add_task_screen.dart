@@ -14,6 +14,7 @@ class AddTaskScreen extends StatefulWidget {
   final String? initialPriority;
   final DateTime? initialDueDate;
   final int? initialEstimatedMinutes;
+  final bool? initialSetReminder;
 
   const AddTaskScreen({
     super.key,
@@ -25,6 +26,7 @@ class AddTaskScreen extends StatefulWidget {
     this.initialPriority,
     this.initialDueDate,
     this.initialEstimatedMinutes,
+    this.initialSetReminder,
   });
 
   @override
@@ -55,6 +57,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       _selectedType = widget.initialType ?? 'Assignment';
       _selectedPriority = widget.initialPriority ?? 'Medium';
       _estimatedMinutes = widget.initialEstimatedMinutes ?? 45;
+      _setReminder = widget.initialSetReminder ?? true;
       if (widget.initialDueDate != null) {
         _selectedDate = widget.initialDueDate!;
         _selectedTime = TimeOfDay.fromDateTime(widget.initialDueDate!);
@@ -123,6 +126,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           priority: _selectedPriority,
           description: _descriptionController.text.trim(),
           estimatedMinutes: _estimatedMinutes,
+          setReminder: _setReminder,
         ).timeout(const Duration(seconds: 20));
       } else {
         await TaskService.addTask(
@@ -133,6 +137,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           priority: _selectedPriority,
           description: _descriptionController.text.trim(),
           estimatedMinutes: _estimatedMinutes,
+          setReminder: _setReminder,
         ).timeout(const Duration(seconds: 20));
       }
 
@@ -167,6 +172,52 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Widget _buildDeadlineHint(Color textSecondary) {
+    final due = DateTime(
+      _selectedDate.year, _selectedDate.month, _selectedDate.day,
+      _selectedTime.hour, _selectedTime.minute,
+    );
+    final now = DateTime.now();
+    final diff = due.difference(now);
+
+    IconData icon;
+    String msg;
+    Color color;
+
+    if (diff.isNegative) {
+      icon = Icons.error_outline_rounded;
+      color = AppTheme.error;
+      msg = 'This time has already passed — no alarm will fire.';
+    } else if (diff.inMinutes < 60) {
+      icon = Icons.notifications_active_rounded;
+      color = AppTheme.warning;
+      msg = 'Due in ${diff.inMinutes} min — alarm fires at due time.';
+    } else if (diff.inHours < 24) {
+      icon = Icons.notifications_active_rounded;
+      color = AppTheme.success;
+      final h = diff.inHours;
+      final m = diff.inMinutes % 60;
+      msg = 'Due in ${h}h ${m}m — you\'ll be alerted at due time.';
+    } else {
+      icon = Icons.event_available_rounded;
+      color = AppTheme.success;
+      msg = 'Due in ${diff.inDays} day${diff.inDays == 1 ? '' : 's'}.';
+    }
+
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            msg,
+            style: AppTheme.bodySmall.copyWith(color: color, fontSize: 12),
+          ),
+        ),
+      ],
+    );
   }
 
   Color _getPriorityColor(String priority) {
@@ -342,6 +393,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                _buildDeadlineHint(textSecondary),
 
                 const SizedBox(height: 20),
 
@@ -492,7 +545,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           children: [
                             Text('Set Reminder', style: AppTheme.labelMedium),
                             Text(
-                              'Get notified before due date',
+                              'Get notified 6h before due time',
                               style: AppTheme.bodySmall.copyWith(
                                 color: textSecondary,
                               ),

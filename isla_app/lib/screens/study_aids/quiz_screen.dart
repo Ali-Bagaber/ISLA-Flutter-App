@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/user_settings_service.dart';
+import '../../widgets/confetti_overlay.dart';
 
 class QuizScreen extends StatefulWidget {
   final Map<String, dynamic> document;
@@ -103,12 +105,14 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _selectAnswer(int index) {
     if (!_answered) {
+      final isCorrect = index == _questions[_currentQuestion]['correct'];
       setState(() {
         _selectedAnswer = index;
         _answered = true;
         _userAnswers.add(index);
-        if (index == _questions[_currentQuestion]['correct']) _score++;
+        if (isCorrect) _score++;
       });
+      if (isCorrect) ConfettiBurst.fire(context, particleCount: 18);
     }
   }
 
@@ -126,6 +130,8 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   Future<void> _saveResult() async {
+    // +5 XP per correct answer (max 25 XP for a 5-question quiz).
+    if (_score > 0) UserSettingsService.addXp(_score * 5).ignore();
     try {
       await GeminiStudyService.saveQuizWithResult(
         title: widget.document['title'] ?? '',

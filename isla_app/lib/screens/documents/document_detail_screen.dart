@@ -1,9 +1,8 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/document_service.dart';
@@ -300,7 +299,7 @@ class DocumentDetailScreen extends StatelessWidget {
                               document['downloadUrl']) as String?) ??
                           '';
                       if (url.isNotEmpty) {
-                        html.window.open(url, '_blank');
+                        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
                       }
                     },
                     style: ElevatedButton.styleFrom(

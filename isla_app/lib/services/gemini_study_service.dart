@@ -603,11 +603,13 @@ class GeminiStudyService {
   static Future<void> saveSession({
     required int focusMinutes,
     required int cycles,
+    int plannedCycles = 0,
     String? subject,
     int? checklistDone,
     int? checklistTotal,
     int verifiedCorrect = 0,
     int verifiedTotal = 0,
+    bool quizAvailable = true,
   }) async {
     final db = _db;
     final userId = _userId;
@@ -618,20 +620,28 @@ class GeminiStudyService {
 
     // Session score (0–100). Transparent formula:
     //   Base                                10
-    //   Cycles completed (×10, cap at 4)    0–40
+    //   Cycles completed (vs PLAN)          0–40
     //   Checklist completion %              0–20
-    //   Verification correctness %          0–30
-    // Skipping the Quick Check yields 0 for the verification slice — so users
-    // who actually demonstrate retention earn a meaningfully higher score.
-    final cycleScore = (min(cycles, 4) * 10);
+    //   Verification correctness %          0–30 (auto-granted if no quiz)
+    // Cycles are scored against the user's plan — finishing every planned cycle
+    // earns full marks. Skipping a real Quick Check yields 0 for verification.
+    final cycleRatio = plannedCycles > 0
+        ? (cycles / plannedCycles).clamp(0.0, 1.0)
+        : (cycles > 0 ? (min(cycles, 4) / 4) : 0.0);
+    final cycleScore = (cycleRatio * 40).round();
     final checklistRatio = total > 0
         ? (done / total).clamp(0.0, 1.0)
         : 0.0;
     final checklistScore = (checklistRatio * 20).round();
-    final verifyRatio = verifiedTotal > 0
-        ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0)
-        : 0.0;
-    final verifyScore = (verifyRatio * 30).round();
+    final int verifyScore;
+    if (!quizAvailable) {
+      verifyScore = 30;
+    } else {
+      final verifyRatio = verifiedTotal > 0
+          ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0)
+          : 0.0;
+      verifyScore = (verifyRatio * 30).round();
+    }
     final focusScore =
         (10 + cycleScore + checklistScore + verifyScore).clamp(0, 100);
 

@@ -3,12 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/gpa_service.dart';
+import '../../services/user_settings_service.dart';
 import '../../services/nav_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/isla_logo.dart';
@@ -436,6 +438,114 @@ class AnalyticsScreen extends StatelessWidget {
                                               ),
                                             ],
                                           ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        StreamBuilder<Map<String, int>>(
+                                          stream: UserSettingsService.watchXp(),
+                                          builder: (context, xpSnap) {
+                                            final xp = xpSnap.data?['xp'] ?? 0;
+                                            final level = UserSettingsService.levelFromXp(xp);
+                                            final xpThisLevel = UserSettingsService.xpForLevel(level);
+                                            final xpNextLevel = UserSettingsService.xpForLevel(level + 1);
+                                            final progress = xpNextLevel > xpThisLevel
+                                                ? ((xp - xpThisLevel) / (xpNextLevel - xpThisLevel)).clamp(0.0, 1.0)
+                                                : 1.0;
+                                            return Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: isDark
+                                                      ? [const Color(0xFF0D2233), const Color(0xFF0A1A2A)]
+                                                      : [const Color(0xFFE0F4FF), const Color(0xFFD0EAF8)],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                borderRadius: BorderRadius.circular(14),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? const Color(0xFF00C2D4).withValues(alpha: 0.3)
+                                                      : const Color(0xFF00C2D4).withValues(alpha: 0.4),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Container(
+                                                    width: 48,
+                                                    height: 48,
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFF00C2D4).withValues(alpha: 0.15),
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(color: const Color(0xFF00C2D4), width: 2),
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        '$level',
+                                                        style: GoogleFonts.manrope(
+                                                          color: const Color(0xFF00C2D4),
+                                                          fontWeight: FontWeight.w800,
+                                                          fontSize: 18,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                              'Level $level',
+                                                              style: GoogleFonts.manrope(
+                                                                color: isDark ? Colors.white : const Color(0xFF0F1A1F),
+                                                                fontWeight: FontWeight.w700,
+                                                                fontSize: 15,
+                                                              ),
+                                                            ),
+                                                            Text(
+                                                              '$xp / $xpNextLevel XP',
+                                                              style: GoogleFonts.inter(
+                                                                color: const Color(0xFF00C2D4),
+                                                                fontSize: 12,
+                                                                fontWeight: FontWeight.w600,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(height: 6),
+                                                        ClipRRect(
+                                                          borderRadius: BorderRadius.circular(4),
+                                                          child: LinearProgressIndicator(
+                                                            value: progress,
+                                                            minHeight: 7,
+                                                            backgroundColor: isDark
+                                                                ? Colors.white.withValues(alpha: 0.08)
+                                                                : Colors.black.withValues(alpha: 0.08),
+                                                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                                              Color(0xFF00C2D4),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 4),
+                                                        Text(
+                                                          'Sessions · Tasks · Quizzes earn XP',
+                                                          style: GoogleFonts.inter(
+                                                            color: isDark
+                                                                ? Colors.white.withValues(alpha: 0.4)
+                                                                : const Color(0xFF5A6770),
+                                                            fontSize: 10,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
                                         ),
                                         const SizedBox(height: 12),
                                         GridView.count(
@@ -1188,158 +1298,338 @@ class _MarksSection extends StatelessWidget {
     );
   }
 
+  /// Letter grade + colour for a 0–100 percentage.
+  static ({String letter, Color color}) _gradeFor(double pct) {
+    if (pct >= 80) return (letter: 'A', color: const Color(0xFF10B981));
+    if (pct >= 70) return (letter: 'B', color: const Color(0xFF34D399));
+    if (pct >= 60) return (letter: 'C', color: const Color(0xFFFFD166));
+    if (pct >= 50) return (letter: 'D', color: const Color(0xFFFFA94D));
+    if (pct >= 40) return (letter: 'E', color: const Color(0xFFFF8787));
+    return (letter: 'F', color: const Color(0xFFFF4E4E));
+  }
+
   static Future<void> _showAddMarkDialog(
     BuildContext context, {
     String? subject,
     List<String> courseNames = const [],
   }) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF0E1418) : Colors.white;
+    final field = isDark ? const Color(0xFF161D22) : const Color(0xFFF1F5F8);
+    final onSurface = isDark ? Colors.white : const Color(0xFF0F1A1F);
+    final onMuted = isDark ? Colors.white60 : const Color(0xFF5A6770);
+    final border = isDark ? const Color(0xFF24303A) : const Color(0xFFD4DEE4);
+
     String selectedSubject =
         subject ?? (courseNames.isNotEmpty ? courseNames.first : '');
     final customSubjectCtrl = TextEditingController(
         text: courseNames.contains(selectedSubject) ? '' : selectedSubject);
-    bool useCustomSubject =
-        !courseNames.contains(selectedSubject) && courseNames.isNotEmpty
-            ? false
-            : courseNames.isEmpty;
     final nameCtrl = TextEditingController();
     final scoreCtrl = TextEditingController();
     final maxCtrl = TextEditingController(text: '100');
     String selectedType = 'Quiz';
+    String? errorText;
 
     const types = [
-      'Quiz',
-      'Assignment',
-      'Lab',
-      'Midterm',
-      'Final',
-      'Project',
-      'Other',
+      'Quiz', 'Assignment', 'Lab', 'Midterm', 'Final', 'Project', 'Other',
     ];
+
+    InputDecoration deco(String label, {String? hint}) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          labelStyle: TextStyle(color: onMuted, fontSize: 13),
+          hintStyle: TextStyle(color: onMuted.withValues(alpha: 0.5)),
+          filled: true,
+          fillColor: field,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: IslaColors.primary, width: 1.6),
+          ),
+        );
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Add Mark'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Subject — dropdown if courses exist, else text field
-                if (courseNames.isNotEmpty)
-                  DropdownButtonFormField<String>(
-                    value: courseNames.contains(selectedSubject)
-                        ? selectedSubject
-                        : courseNames.first,
-                    decoration: const InputDecoration(labelText: 'Course'),
-                    items: courseNames
-                        .map((n) => DropdownMenuItem(value: n, child: Text(n)))
-                        .toList(),
-                    onChanged: (v) =>
-                        setDialogState(() => selectedSubject = v ?? ''),
-                  )
-                else
-                  TextField(
-                    controller: customSubjectCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject / Course',
-                      hintText: 'e.g. Web Engineering',
-                    ),
-                    onChanged: (v) => selectedSubject = v.trim(),
-                  ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(labelText: 'Type'),
-                  items: types
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (v) =>
-                      setDialogState(() => selectedType = v ?? 'Quiz'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    hintText: '$selectedType 1',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
+        builder: (ctx, setDialogState) {
+          final score = double.tryParse(scoreCtrl.text.trim());
+          final max = double.tryParse(maxCtrl.text.trim());
+          final hasValidNums =
+              score != null && max != null && max > 0 && score <= max;
+          final pct = hasValidNums ? (score / max * 100) : null;
+          final grade = pct != null ? _gradeFor(pct) : null;
+
+          return Dialog(
+            backgroundColor: surface,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: scoreCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(labelText: 'Score'),
+                    // ── Header ──────────────────────────────────────────────
+                    Row(children: [
+                      Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: IslaColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.grade_rounded,
+                            color: IslaColors.primary, size: 20),
                       ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('/', style: TextStyle(fontSize: 20)),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: maxCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(labelText: 'Out of'),
+                      const SizedBox(width: 12),
+                      Text('Add Mark',
+                          style: TextStyle(
+                              color: onSurface,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                    const SizedBox(height: 20),
+
+                    // ── Course ──────────────────────────────────────────────
+                    if (courseNames.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        initialValue: courseNames.contains(selectedSubject)
+                            ? selectedSubject
+                            : courseNames.first,
+                        isExpanded: true,
+                        dropdownColor: field,
+                        style: TextStyle(color: onSurface, fontSize: 14),
+                        decoration: deco('Course'),
+                        items: courseNames
+                            .map((n) =>
+                                DropdownMenuItem(value: n, child: Text(n)))
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => selectedSubject = v ?? ''),
+                      )
+                    else
+                      TextField(
+                        controller: customSubjectCtrl,
+                        style: TextStyle(color: onSurface),
+                        decoration: deco('Subject / Course',
+                            hint: 'e.g. Web Engineering'),
+                        onChanged: (v) => selectedSubject = v.trim(),
                       ),
+                    const SizedBox(height: 12),
+
+                    // ── Type ────────────────────────────────────────────────
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedType,
+                      isExpanded: true,
+                      dropdownColor: field,
+                      style: TextStyle(color: onSurface, fontSize: 14),
+                      decoration: deco('Type'),
+                      items: types
+                          .map((t) =>
+                              DropdownMenuItem(value: t, child: Text(t)))
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => selectedType = v ?? 'Quiz'),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Name ────────────────────────────────────────────────
+                    TextField(
+                      controller: nameCtrl,
+                      style: TextStyle(color: onSurface),
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: deco('Name', hint: '$selectedType 1'),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Score / Out of ──────────────────────────────────────
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: scoreCtrl,
+                            style: TextStyle(color: onSurface),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d*')),
+                            ],
+                            decoration: deco('Score'),
+                            onChanged: (_) => setDialogState(() {}),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text('/',
+                              style: TextStyle(
+                                  fontSize: 22, color: onMuted)),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: maxCtrl,
+                            style: TextStyle(color: onSurface),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d*')),
+                            ],
+                            decoration: deco('Out of'),
+                            onChanged: (_) => setDialogState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ── Live grade preview ──────────────────────────────────
+                    if (grade != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: grade.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: grade.color.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(children: [
+                          Container(
+                            width: 36, height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: grade.color,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text(grade.letter,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 17)),
+                          ),
+                          const SizedBox(width: 12),
+                          Text('${pct!.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                  color: onSurface,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text('Grade ${grade.letter}',
+                              style: TextStyle(
+                                  color: grade.color,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                    ],
+
+                    // ── Inline error ────────────────────────────────────────
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        const Icon(Icons.error_outline_rounded,
+                            color: Color(0xFFFF4E4E), size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(errorText!,
+                              style: const TextStyle(
+                                  color: Color(0xFFFF4E4E), fontSize: 12.5)),
+                        ),
+                      ]),
+                    ],
+
+                    const SizedBox(height: 18),
+
+                    // ── Actions ─────────────────────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text('Cancel',
+                              style: TextStyle(color: onMuted)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final sub = courseNames.isNotEmpty
+                                ? selectedSubject
+                                : customSubjectCtrl.text.trim();
+                            final name = nameCtrl.text.trim();
+                            final s = double.tryParse(scoreCtrl.text.trim());
+                            final m = double.tryParse(maxCtrl.text.trim());
+
+                            String? err;
+                            if (sub.isEmpty) {
+                              err = 'Choose or enter a course.';
+                            } else if (name.isEmpty) {
+                              err = 'Give this mark a name.';
+                            } else if (s == null) {
+                              err = 'Enter a valid score.';
+                            } else if (m == null || m <= 0) {
+                              err = 'Enter a valid "out of" total.';
+                            } else if (s < 0) {
+                              err = 'Score can\'t be negative.';
+                            } else if (s > m) {
+                              err = 'Score can\'t exceed the total ($m).';
+                            }
+                            if (err != null) {
+                              setDialogState(() => errorText = err);
+                              return;
+                            }
+
+                            final db = _db;
+                            final uid = _uid;
+                            if (db == null || uid == null) return;
+                            final ref = db.collection('marks').doc();
+                            await ref.set({
+                              'markId': ref.id,
+                              'userId': uid,
+                              'subject': sub,
+                              'name': name,
+                              'type': selectedType,
+                              'score': s,
+                              'maxScore': m,
+                              'percentage': (s! / m! * 100).roundToDouble(),
+                              'createdAt': FieldValue.serverTimestamp(),
+                            });
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: hasValidNums
+                                ? IslaColors.primary
+                                : IslaColors.primary.withValues(alpha: 0.5),
+                            foregroundColor: IslaColors.onPrimaryContainer,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 22, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Save',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final sub = courseNames.isNotEmpty
-                    ? selectedSubject
-                    : customSubjectCtrl.text.trim();
-                final name = nameCtrl.text.trim();
-                final score = double.tryParse(scoreCtrl.text.trim());
-                final max = double.tryParse(maxCtrl.text.trim());
-                if (sub.isEmpty ||
-                    name.isEmpty ||
-                    score == null ||
-                    max == null ||
-                    max <= 0) {
-                  return;
-                }
-                final db = _db;
-                final uid = _uid;
-                if (db == null || uid == null) return;
-                final ref = db.collection('marks').doc();
-                await ref.set({
-                  'markId': ref.id,
-                  'userId': uid,
-                  'subject': sub,
-                  'name': name,
-                  'type': selectedType,
-                  'score': score,
-                  'maxScore': max,
-                  'percentage': (score / max * 100).roundToDouble(),
-                  'createdAt': FieldValue.serverTimestamp(),
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: IslaColors.primary,
-                foregroundColor: IslaColors.onPrimaryContainer,
               ),
-              child: const Text('Save'),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
 

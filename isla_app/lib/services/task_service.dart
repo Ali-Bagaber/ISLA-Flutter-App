@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
+import 'user_settings_service.dart';
 
 class TaskService {
   static FirebaseFirestore? get _db {
@@ -49,6 +50,7 @@ class TaskService {
     required String priority,
     String description = '',
     int estimatedMinutes = 45,
+    bool setReminder = true,
   }) async {
     final col = _col;
     final userId = _userId;
@@ -71,23 +73,27 @@ class TaskService {
       'status': 'notStarted',
       'estimatedMinutes': estimatedMinutes,
       'reminderAt': Timestamp.fromDate(
-        dueDate.subtract(const Duration(hours: 12)),
+        dueDate.subtract(const Duration(hours: 6)),
       ),
+      'setReminder': setReminder,
       'completed': false,
       'userId': userId,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Advance reminder (fires before due time).
-    await NotificationService.instance.scheduleTaskReminder(
-      taskId: ref.id,
-      title: title,
-      subject: subject,
-      dueDate: dueDate,
-      priority: priority,
-    );
-    // At-due-time alarm — sound intensity scales with priority.
+    // Advance reminder 6h before due time (only if enabled).
+    if (setReminder) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: ref.id,
+        title: title,
+        subject: subject,
+        dueDate: dueDate,
+        priority: priority,
+        hoursBefore: 6,
+      );
+    }
+    // At-due-time alarm — sound/vibration intensity scales with priority.
     await NotificationService.instance.scheduleDueTimeAlarm(
       taskId: ref.id,
       title: title,
@@ -102,16 +108,27 @@ class TaskService {
   /// Toggle task completed/incomplete
   static Future<void> toggleTask(String id, bool completed) async {
     if (_userId == null) return;
+    // Read whether XP is currently held for this task so we can mirror the
+    // completion state: award once on complete, take it back on un-complete.
+    final snap = await _col?.doc(id).get();
+    final data = snap?.data() as Map<String, dynamic>?;
+    final wasAwarded = data?['xpAwarded'] as bool? ?? false;
+
     await _col?.doc(id).update({
       'completed': completed,
       'status': completed ? 'completed' : 'inProgress',
       'completedAt': completed ? FieldValue.serverTimestamp() : null,
+      'xpAwarded': completed, // XP held == task currently complete
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    // Cancel both alarms when task is marked complete.
+
     if (completed) {
       await NotificationService.instance.cancelTaskReminder(id);
       await NotificationService.instance.cancelDueTimeAlarm(id);
+      if (!wasAwarded) UserSettingsService.addXp(10).ignore(); // +10 once
+    } else {
+      // Un-completed → it isn't finished, so take the reward back.
+      if (wasAwarded) UserSettingsService.addXp(-10).ignore(); // −10
     }
   }
 
@@ -125,6 +142,7 @@ class TaskService {
     required String priority,
     String description = '',
     int? estimatedMinutes,
+    bool setReminder = true,
   }) async {
     if (_userId == null) return;
     await _col?.doc(id).update({
@@ -136,17 +154,23 @@ class TaskService {
       'priority': priority,
       'description': description,
       if (estimatedMinutes != null) 'estimatedMinutes': estimatedMinutes,
+      'setReminder': setReminder,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Re-schedule advance reminder.
-    await NotificationService.instance.scheduleTaskReminder(
-      taskId: id,
-      title: title,
-      subject: subject,
-      dueDate: dueDate,
-      priority: priority,
-    );
+    // Re-schedule advance reminder 6h before (only if enabled).
+    if (setReminder) {
+      await NotificationService.instance.scheduleTaskReminder(
+        taskId: id,
+        title: title,
+        subject: subject,
+        dueDate: dueDate,
+        priority: priority,
+        hoursBefore: 6,
+      );
+    } else {
+      await NotificationService.instance.cancelTaskReminder(id);
+    }
     // Re-schedule at-due-time alarm.
     await NotificationService.instance.scheduleDueTimeAlarm(
       taskId: id,

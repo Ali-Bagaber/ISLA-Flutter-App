@@ -1015,34 +1015,36 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     super.initState();
     UserSettingsService.loadSettings().then((s) {
       if (!mounted) return;
-      setState(() {
-        _data = s;
-        _loading = false;
-      });
+      setState(() { _data = s; _loading = false; });
     });
   }
 
   Map<String, dynamic> get _n =>
       (_data?['notifications'] as Map?)?.cast<String, dynamic>() ?? {};
 
-  Future<void> _update({
-    bool? taskReminders,
-    bool? pomodoroAlerts,
-    bool? streakReminder,
-    int? streakHour,
-  }) async {
-    setState(() {
-      _n['taskReminders'] = taskReminders ?? _n['taskReminders'];
-      _n['pomodoroAlerts'] = pomodoroAlerts ?? _n['pomodoroAlerts'];
-      _n['streakReminder'] = streakReminder ?? _n['streakReminder'];
-      _n['streakHour'] = streakHour ?? _n['streakHour'];
-    });
+  Future<void> _update(Map<String, dynamic> patch) async {
+    setState(() => patch.forEach((k, v) => _n[k] = v));
     await UserSettingsService.saveNotifications(
-      taskReminders: taskReminders,
-      pomodoroAlerts: pomodoroAlerts,
-      streakReminder: streakReminder,
-      streakHour: streakHour,
+      taskReminders:    patch['taskReminders']    as bool?,
+      pomodoroAlerts:   patch['pomodoroAlerts']   as bool?,
+      streakReminder:   patch['streakReminder']   as bool?,
+      streakHour:       patch['streakHour']       as int?,
+      sessionStartAlert: patch['sessionStartAlert'] as bool?,
+      sessionHalfAlert:  patch['sessionHalfAlert']  as bool?,
+      morningReminder:  patch['morningReminder']  as bool?,
+      morningHour:      patch['morningHour']      as int?,
+      eveningReminder:  patch['eveningReminder']  as bool?,
+      eveningHour:      patch['eveningHour']      as int?,
     );
+  }
+
+  bool _bool(String key, bool def) => (_n[key] as bool?) ?? def;
+  int  _int(String key, int def)   => (_n[key] as num?)?.toInt() ?? def;
+
+  String _fmtHour(int h) {
+    final period = h >= 12 ? 'PM' : 'AM';
+    final display = h % 12 == 0 ? 12 : h % 12;
+    return '$display:00 $period';
   }
 
   @override
@@ -1050,95 +1052,192 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = AppTheme.getTextPrimary(isDark);
     final textSecondary = AppTheme.getTextSecondary(isDark);
+    final cardBg = AppTheme.getCardColor(isDark);
 
     if (_loading) {
-      return const SizedBox(
-        height: 240,
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const SizedBox(height: 240, child: Center(child: CircularProgressIndicator()));
     }
 
-    final taskOn = _n['taskReminders'] == true;
-    final pomoOn = _n['pomodoroAlerts'] == true;
-    final streakOn = _n['streakReminder'] == true;
-    final hour = (_n['streakHour'] as num?)?.toInt() ?? 20;
+    final taskOn       = _bool('taskReminders',    true);
+    final pomoOn       = _bool('pomodoroAlerts',   true);
+    final streakOn     = _bool('streakReminder',   true);
+    final streakHour   = _int('streakHour',        20);
+    final startAlert   = _bool('sessionStartAlert', true);
+    final halfAlert    = _bool('sessionHalfAlert',  false);
+    final morningOn    = _bool('morningReminder',   false);
+    final morningHour  = _int('morningHour',         8);
+    final eveningOn    = _bool('eveningReminder',   false);
+    final eveningHour  = _int('eveningHour',        20);
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    Widget sectionHeader(String title) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 0, 6),
+      child: Text(
+        title.toUpperCase(),
+        style: GoogleFonts.inter(
+          color: AppTheme.primaryColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+
+    Widget notifTile({
+      required String title,
+      required String subtitle,
+      required bool value,
+      required ValueChanged<bool> onChanged,
+      Widget? extra,
+    }) =>
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: SwitchListTile(
+                value: value,
+                onChanged: onChanged,
+                activeThumbColor: AppTheme.primaryColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                title: Text(title,
+                    style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text(subtitle,
+                    style: TextStyle(color: textSecondary, fontSize: 12, height: 1.4)),
+              ),
+            ),
+            if (extra != null) ...[const SizedBox(height: 6), extra],
+          ],
+        );
+
+    Widget hourSlider(int currentHour, ValueChanged<int> onHourChanged) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          const Icon(Icons.access_time_rounded, size: 16, color: AppTheme.primaryColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Slider(
+              value: currentHour.toDouble(),
+              min: 5,
+              max: 23,
+              divisions: 18,
+              activeColor: AppTheme.primaryColor,
+              label: _fmtHour(currentHour),
+              onChanged: (v) => onHourChanged(v.round()),
+            ),
+          ),
+          Text(
+            _fmtHour(currentHour),
+            style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.82,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.getBackgroundColor(isDark),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: ListView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          children: [
+            // Handle
             Center(
               child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
+                width: 40, height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: textSecondary.withValues(alpha: 0.4),
+                  color: textSecondary.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             Text('Notifications',
                 style: GoogleFonts.manrope(
-                  color: textPrimary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                )),
+                  color: textPrimary, fontWeight: FontWeight.w800, fontSize: 20)),
             const SizedBox(height: 4),
             Text(
-              'On the web, alerts only fire while the tab is open. '
-              'For background reminders, install the app on Android/iOS.',
-              style: GoogleFonts.inter(color: textSecondary, fontSize: 12),
+              'On web, alerts only fire while the tab is open. '
+              'Install on Android/iOS for background reminders.',
+              style: GoogleFonts.inter(color: textSecondary, fontSize: 12, height: 1.5),
             ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              value: taskOn,
-              onChanged: (v) => _update(taskReminders: v),
-              activeThumbColor: AppTheme.primaryColor,
-              title: const Text('Task reminders'),
-              subtitle:
-                  const Text('Notify me 12 hours before a task is due.'),
+
+            // ── Focus Sessions ─────────────────────────────────────────────
+            sectionHeader('Focus Sessions'),
+            notifTile(
+              title: 'Session start alert',
+              subtitle: 'Notify me when my focus timer begins.',
+              value: startAlert,
+              onChanged: (v) => _update({'sessionStartAlert': v}),
             ),
-            SwitchListTile(
+            const SizedBox(height: 8),
+            notifTile(
+              title: 'Halfway reminder',
+              subtitle: 'Nudge me when I\'m halfway through a cycle.',
+              value: halfAlert,
+              onChanged: (v) => _update({'sessionHalfAlert': v}),
+            ),
+            const SizedBox(height: 8),
+            notifTile(
+              title: 'Cycle complete',
+              subtitle: 'Notify me when a Pomodoro focus cycle ends.',
               value: pomoOn,
-              onChanged: (v) => _update(pomodoroAlerts: v),
-              activeThumbColor: AppTheme.primaryColor,
-              title: const Text('Pomodoro alerts'),
-              subtitle: const Text('Notify me when a focus cycle ends.'),
+              onChanged: (v) => _update({'pomodoroAlerts': v}),
             ),
-            SwitchListTile(
+
+            // ── Tasks ──────────────────────────────────────────────────────
+            sectionHeader('Tasks'),
+            notifTile(
+              title: 'Task reminders',
+              subtitle: 'Notify me 12 hours before a task is due.',
+              value: taskOn,
+              onChanged: (v) => _update({'taskReminders': v}),
+            ),
+
+            // ── Daily Reminders ────────────────────────────────────────────
+            sectionHeader('Daily Reminders'),
+            notifTile(
+              title: 'Morning study reminder',
+              subtitle: 'A gentle nudge to start your study session.',
+              value: morningOn,
+              onChanged: (v) => _update({'morningReminder': v}),
+              extra: morningOn
+                  ? hourSlider(morningHour, (h) => _update({'morningHour': h}))
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            notifTile(
+              title: 'Evening study reminder',
+              subtitle: 'Wind down your day with a quick study session.',
+              value: eveningOn,
+              onChanged: (v) => _update({'eveningReminder': v}),
+              extra: eveningOn
+                  ? hourSlider(eveningHour, (h) => _update({'eveningHour': h}))
+                  : null,
+            ),
+
+            // ── Streaks ────────────────────────────────────────────────────
+            sectionHeader('Streaks'),
+            notifTile(
+              title: 'Daily streak reminder',
+              subtitle: 'Keep your streak alive with a daily nudge.',
               value: streakOn,
-              onChanged: (v) => _update(streakReminder: v),
-              activeThumbColor: AppTheme.primaryColor,
-              title: const Text('Daily streak reminder'),
-              subtitle: Text(
-                  'Nudge me to study at ${hour.toString().padLeft(2, '0')}:00.'),
+              onChanged: (v) => _update({'streakReminder': v}),
+              extra: streakOn
+                  ? hourSlider(streakHour, (h) => _update({'streakHour': h}))
+                  : null,
             ),
-            if (streakOn) ...[
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Text('Hour:', style: TextStyle(color: textSecondary)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Slider(
-                        value: hour.toDouble(),
-                        min: 6,
-                        max: 23,
-                        divisions: 17,
-                        label: '${hour.toString().padLeft(2, '0')}:00',
-                        onChanged: (v) => _update(streakHour: v.round()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,9 +8,12 @@ import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
+import '../../widgets/confetti_overlay.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
 import '../planner/add_task_screen.dart';
+
+enum _TimeGroup { overdue, morning, afternoon, evening, anytime }
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -19,8 +23,8 @@ class TasksScreen extends StatefulWidget {
 }
 
 class _TasksScreenState extends State<TasksScreen> {
-  bool _showCompleted = false;
   final Map<String, bool> _demoCompletion = <String, bool>{};
+  final Map<String, bool> _sectionCollapsed = {};
 
   final List<_TaskVm> _demoTasks = [
     _TaskVm(
@@ -97,6 +101,8 @@ class _TasksScreenState extends State<TasksScreen> {
         type: typeRaw,
         priority: priorityRaw,
         subject: subjectRaw,
+        estimatedMinutes: (task['estimatedMinutes'] as num?)?.toInt() ?? 0,
+        setReminder: task['setReminder'] as bool? ?? true,
       );
     }).toList();
   }
@@ -195,14 +201,15 @@ class _TasksScreenState extends State<TasksScreen> {
     return '$hour12:$minute $suffix';
   }
 
-  void _toggleTask(_TaskVm task, bool nextValue) {
+  /// Commit the completion change to data. Called by [_TaskTile] AFTER its
+  /// check/exit animation has played (on complete) or immediately (on uncheck).
+  void _commitToggle(_TaskVm task, bool value) {
     if (task.id.startsWith('demo_')) {
-      setState(() => _demoCompletion[task.id] = nextValue);
+      setState(() => _demoCompletion[task.id] = value);
       return;
     }
-
     if (task.id.isEmpty) return;
-    TaskService.toggleTask(task.id, nextValue);
+    TaskService.toggleTask(task.id, value);
   }
 
   void _openEditTask(_TaskVm task) {
@@ -217,12 +224,240 @@ class _TasksScreenState extends State<TasksScreen> {
           initialType: task.type,
           initialPriority: task.priority,
           initialDueDate: task.dueDate,
+          initialEstimatedMinutes: task.estimatedMinutes,
+          initialSetReminder: task.setReminder,
         ),
       ),
     );
   }
 
   void _showNotificationsSheet() => showIslaNotificationsInbox(context);
+
+  // ── Time grouping helpers ──────────────────────────────────────────────────
+
+  _TimeGroup _timeGroupFor(_TaskVm task) {
+    if (task.dueDate == null) return _TimeGroup.anytime;
+    if (task.dueDate!.isBefore(DateTime.now())) return _TimeGroup.overdue;
+    final h = task.dueDate!.hour;
+    if (h >= 5 && h < 12) return _TimeGroup.morning;
+    if (h >= 12 && h < 18) return _TimeGroup.afternoon;
+    if (h >= 18 && h < 23) return _TimeGroup.evening;
+    return _TimeGroup.anytime;
+  }
+
+  String _groupLabel(_TimeGroup g) {
+    switch (g) {
+      case _TimeGroup.overdue: return 'OVERDUE';
+      case _TimeGroup.morning: return 'MORNING';
+      case _TimeGroup.afternoon: return 'AFTERNOON';
+      case _TimeGroup.evening: return 'EVENING';
+      case _TimeGroup.anytime: return 'ANYTIME';
+    }
+  }
+
+  IconData _groupIcon(_TimeGroup g) {
+    switch (g) {
+      case _TimeGroup.overdue: return Icons.warning_amber_rounded;
+      case _TimeGroup.morning: return Icons.wb_twilight_rounded;
+      case _TimeGroup.afternoon: return Icons.wb_sunny_rounded;
+      case _TimeGroup.evening: return Icons.nightlight_round;
+      case _TimeGroup.anytime: return Icons.access_time_rounded;
+    }
+  }
+
+  Color _groupColor(_TimeGroup g, _TaskPalette palette) {
+    switch (g) {
+      case _TimeGroup.overdue: return const Color(0xFFFF4E4E);
+      case _TimeGroup.morning: return const Color(0xFFFFB347);
+      case _TimeGroup.afternoon: return const Color(0xFF00C2D4);
+      case _TimeGroup.evening: return const Color(0xFF8B5CF6);
+      case _TimeGroup.anytime: return palette.onSurfaceMute;
+    }
+  }
+
+  IconData _iconForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'assignment': return Icons.assignment_rounded;
+      case 'exam': return Icons.quiz_rounded;
+      case 'revision': return Icons.menu_book_rounded;
+      case 'quiz': return Icons.help_outline_rounded;
+      case 'project': return Icons.work_rounded;
+      default: return Icons.task_alt_rounded;
+    }
+  }
+
+  Color _colorForType(String type, _TaskPalette palette) {
+    switch (type.toLowerCase()) {
+      case 'assignment': return const Color(0xFF00C2D4);
+      case 'exam': return const Color(0xFFFF4E4E);
+      case 'revision': return const Color(0xFF8B5CF6);
+      case 'quiz': return const Color(0xFFFFB347);
+      case 'project': return const Color(0xFF10B981);
+      default: return palette.primary;
+    }
+  }
+
+  Widget _buildDateHeader(int total, int done, _TaskPalette palette) {
+    final now = DateTime.now();
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                days[now.weekday - 1],
+                style: GoogleFonts.manrope(
+                  fontSize: 38, fontWeight: FontWeight.w800,
+                  letterSpacing: -1.2, color: palette.onSurface,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: palette.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(children: [
+                Icon(Icons.check_circle_outline_rounded, color: palette.primary, size: 14),
+                const SizedBox(width: 5),
+                Text(
+                  '$done / $total',
+                  style: GoogleFonts.manrope(
+                    color: palette.primary, fontSize: 13, fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
+        Text(
+          '${months[now.month - 1]} ${now.day}, ${now.year}',
+          style: GoogleFonts.inter(color: palette.onSurfaceMute, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildGroupedSections(List<_TaskVm> tasks, _TaskPalette palette) {
+    final groups = <_TimeGroup, List<_TaskVm>>{
+      for (final g in _TimeGroup.values) g: [],
+    };
+    for (final t in tasks) groups[_timeGroupFor(t)]!.add(t);
+
+    final widgets = <Widget>[];
+    for (final group in _TimeGroup.values) {
+      final groupTasks = groups[group]!;
+      if (groupTasks.isEmpty) continue;
+      final label = _groupLabel(group);
+      final collapsed = _sectionCollapsed[label] ?? false;
+      final color = _groupColor(group, palette);
+
+      // Section header
+      widgets.add(
+        GestureDetector(
+          onTap: () => setState(() => _sectionCollapsed[label] = !collapsed),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Row(children: [
+              Icon(_groupIcon(group), color: color, size: 15),
+              const SizedBox(width: 8),
+              Text(
+                '$label (${groupTasks.length})',
+                style: GoogleFonts.manrope(
+                  color: color, fontWeight: FontWeight.w700,
+                  fontSize: 11, letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddTaskScreen())),
+                child: Icon(Icons.add_rounded, color: color.withValues(alpha: 0.8), size: 18),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                collapsed ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                color: color.withValues(alpha: 0.7), size: 18,
+              ),
+            ]),
+          ),
+        ),
+      );
+
+      if (!collapsed) {
+        for (final task in groupTasks) {
+          widgets.add(_buildNewTaskCard(task, palette));
+        }
+      }
+      widgets.add(const SizedBox(height: 4));
+    }
+    return widgets;
+  }
+
+  Widget _buildNewTaskCard(_TaskVm task, _TaskPalette palette,
+      {bool inCompletedSection = false}) {
+    return _TaskTile(
+      key: ValueKey(
+          'tile_${inCompletedSection ? 'done' : 'pending'}_${task.id}'),
+      task: task,
+      palette: palette,
+      typeColor: _colorForType(task.type, palette),
+      typeIcon: _iconForType(task.type),
+      dueLabel: _formatDueLabel(task.dueDate),
+      inCompletedSection: inCompletedSection,
+      onToggle: (value) => _commitToggle(task, value),
+      onConfetti: () => ConfettiBurst.fire(context),
+      onEdit: task.id.startsWith('demo_') ? null : () => _openEditTask(task),
+      onDelete: task.id.startsWith('demo_')
+          ? null
+          : () => TaskService.deleteTask(task.id),
+    );
+  }
+
+  Widget _buildCompletedSection(List<_TaskVm> completed, _TaskPalette palette) {
+    final collapsed = _sectionCollapsed['DONE'] ?? true;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _sectionCollapsed['DONE'] = !collapsed),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: palette.outlineSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Icon(Icons.done_all_rounded, color: palette.onSurfaceMute, size: 15),
+              const SizedBox(width: 8),
+              Text(
+                'COMPLETED (${completed.length})',
+                style: GoogleFonts.manrope(color: palette.onSurfaceMute, fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 1.2),
+              ),
+              const Spacer(),
+              Icon(collapsed ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                  color: palette.onSurfaceMute, size: 18),
+            ]),
+          ),
+        ),
+        if (!collapsed) ...[
+          const SizedBox(height: 8),
+          ...completed.map((task) =>
+              _buildNewTaskCard(task, palette, inCompletedSection: true)),
+        ],
+      ],
+    );
+  }
 
   void _showProfileSheet() {
     showModalBottomSheet(
@@ -328,63 +563,21 @@ class _TasksScreenState extends State<TasksScreen> {
                       if (bd == null) return -1;
                       return bd.compareTo(ad);
                     });
-                  final list = _showCompleted ? completed : pending;
-
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 26, 20, 120),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: Text(
-                            'Tasks',
-                            style: GoogleFonts.manrope(
-                              fontSize: 52,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1.8,
-                              color: palette.onSurface,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _SegmentedToggle(
-                          palette: palette,
-                          pendingCount: pending.length,
-                          completedCount: completed.length,
-                          showCompleted: _showCompleted,
-                          onChanged: (v) => setState(() => _showCompleted = v),
-                        ),
-                        const SizedBox(height: 16),
-                        if (list.isEmpty)
-                          _EmptyTasksCard(
-                            palette: palette,
-                            showCompleted: _showCompleted,
-                          )
+                        _buildDateHeader(source.length, completed.length, palette),
+                        const SizedBox(height: 20),
+                        if (pending.isEmpty)
+                          _EmptyTasksCard(palette: palette, showCompleted: false)
                         else
-                          ...list.asMap().entries.map(
-                                (entry) => _TaskCard(
-                                  task: entry.value,
-                                  palette: palette,
-                                  primaryEmphasis: !_showCompleted &&
-                                      (entry.key == 0 ||
-                                          entry.value.highlighted),
-                                  dueLabel:
-                                      _formatDueLabel(entry.value.dueDate),
-                                  dueIcon: _dueIcon(entry.value.dueDate),
-                                  onToggle: () => _toggleTask(
-                                    entry.value,
-                                    !entry.value.completed,
-                                  ),
-                                  onDelete: entry.value.id.startsWith('demo_')
-                                      ? null
-                                      : () => TaskService.deleteTask(
-                                            entry.value.id,
-                                          ),
-                                  onEdit: entry.value.id.startsWith('demo_')
-                                      ? null
-                                      : () => _openEditTask(entry.value),
-                                ),
-                              ),
+                          ..._buildGroupedSections(pending, palette),
+                        if (completed.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _buildCompletedSection(completed, palette),
+                        ],
                       ],
                     ),
                   );
@@ -785,6 +978,8 @@ class _TaskVm {
   final String type;
   final String priority;
   final String subject;
+  final int estimatedMinutes;
+  final bool setReminder;
 
   const _TaskVm({
     required this.id,
@@ -797,6 +992,8 @@ class _TaskVm {
     this.type = 'Assignment',
     this.priority = 'Medium',
     this.subject = '',
+    this.estimatedMinutes = 0,
+    this.setReminder = true,
   });
 
   _TaskVm copyWith({
@@ -810,6 +1007,8 @@ class _TaskVm {
     String? type,
     String? priority,
     String? subject,
+    int? estimatedMinutes,
+    bool? setReminder,
   }) {
     return _TaskVm(
       id: id ?? this.id,
@@ -822,6 +1021,318 @@ class _TaskVm {
       type: type ?? this.type,
       priority: priority ?? this.priority,
       subject: subject ?? this.subject,
+      estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
+      setReminder: setReminder ?? this.setReminder,
+    );
+  }
+}
+
+// ── Task tile with smooth completion animation ───────────────────────────────
+
+class _TaskTile extends StatefulWidget {
+  final _TaskVm task;
+  final _TaskPalette palette;
+  final Color typeColor;
+  final IconData typeIcon;
+  final String dueLabel;
+  final bool inCompletedSection;
+  final void Function(bool value) onToggle;
+  final VoidCallback onConfetti;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  const _TaskTile({
+    super.key,
+    required this.task,
+    required this.palette,
+    required this.typeColor,
+    required this.typeIcon,
+    required this.dueLabel,
+    required this.inCompletedSection,
+    required this.onToggle,
+    required this.onConfetti,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  @override
+  State<_TaskTile> createState() => _TaskTileState();
+}
+
+class _TaskTileState extends State<_TaskTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _collapse;
+  late final Animation<double> _fade;
+  late final Animation<double> _slide;
+  bool _completing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 620));
+    // Hold ~260ms (check + strikethrough) then collapse/fade/slide away.
+    _collapse = CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.42, 1.0, curve: Curves.easeInCubic));
+    _fade = CurvedAnimation(
+        parent: _ctrl, curve: const Interval(0.42, 0.85, curve: Curves.easeOut));
+    _slide = CurvedAnimation(
+        parent: _ctrl, curve: const Interval(0.42, 1.0, curve: Curves.easeIn));
+    _ctrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed) widget.onToggle(true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onCheck() {
+    if (widget.task.completed) {
+      // Already complete → uncheck immediately (moves back to its time group).
+      widget.onToggle(false);
+      return;
+    }
+    if (_completing) return;
+    widget.onConfetti();
+    setState(() => _completing = true);
+    _ctrl.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    final showChecked = widget.task.completed || _completing;
+    final dim = widget.inCompletedSection || _completing;
+
+    Widget card = GestureDetector(
+      onTap: widget.onEdit,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: dim ? 0.55 : 1.0,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _completing
+                  ? p.primary.withValues(alpha: 0.5)
+                  : p.outlineSoft,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: widget.typeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(widget.typeIcon, color: widget.typeColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 250),
+                      style: GoogleFonts.manrope(
+                        color: p.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        decoration: showChecked
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                        decorationColor: p.onSurfaceMute,
+                      ),
+                      child: Text(widget.task.title,
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(children: [
+                      if (widget.task.subject.isNotEmpty) ...[
+                        Text(widget.task.subject,
+                            style: GoogleFonts.inter(
+                                color: p.onSurfaceMute, fontSize: 11)),
+                        Text(' · ',
+                            style: GoogleFonts.inter(
+                                color: p.onSurfaceMute, fontSize: 11)),
+                      ],
+                      if (widget.task.estimatedMinutes > 0)
+                        Text('${widget.task.estimatedMinutes}m',
+                            style: GoogleFonts.inter(
+                                color: p.onSurfaceMute, fontSize: 11)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(widget.dueLabel,
+                        style: GoogleFonts.inter(
+                            color: widget.typeColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _AnimatedCheckbox(
+                completed: showChecked,
+                activeColor: p.primary,
+                inactiveColor: p.onSurfaceMute.withValues(alpha: 0.35),
+                onTap: _onCheck,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // While completing: collapse height + fade + slide right.
+    if (_completing) {
+      card = AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, child) => ClipRect(
+          child: Align(
+            alignment: Alignment.topCenter,
+            heightFactor: (1 - _collapse.value).clamp(0.0, 1.0),
+            child: Opacity(
+              opacity: (1 - _fade.value).clamp(0.0, 1.0),
+              child: Transform.translate(
+                offset: Offset(_slide.value * 60, 0),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+        child: card,
+      );
+    }
+
+    if (widget.onDelete == null) return card;
+
+    return Dismissible(
+      key: ValueKey('dismiss_${widget.task.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async =>
+          await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: p.card,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Delete Task?',
+                  style: GoogleFonts.manrope(
+                      color: p.onSurface, fontWeight: FontWeight.w700)),
+              content: Text('This will permanently remove "${widget.task.title}".',
+                  style: GoogleFonts.inter(
+                      color: p.onSurfaceMute, fontSize: 14)),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(color: p.onSurfaceMute))),
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: Text('Delete',
+                        style: GoogleFonts.inter(
+                            color: const Color(0xFFFF4E4E),
+                            fontWeight: FontWeight.w700))),
+              ],
+            ),
+          ) ??
+          false,
+      onDismissed: (_) => widget.onDelete!(),
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+            color: const Color(0xFFFF4E4E),
+            borderRadius: BorderRadius.circular(16)),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete_outline_rounded,
+            color: Colors.white, size: 22),
+      ),
+      child: card,
+    );
+  }
+}
+
+// ── Animated checkbox ─────────────────────────────────────────────────────────
+
+class _AnimatedCheckbox extends StatefulWidget {
+  final bool completed;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  const _AnimatedCheckbox({
+    required this.completed,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+  });
+
+  @override
+  State<_AnimatedCheckbox> createState() => _AnimatedCheckboxState();
+}
+
+class _AnimatedCheckboxState extends State<_AnimatedCheckbox>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 350));
+    _scale = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.35), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.35, end: 0.85), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.85, end: 1.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _ctrl.forward(from: 0);
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _handleTap,
+      child: ScaleTransition(
+        scale: _scale,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          transitionBuilder: (child, anim) =>
+              ScaleTransition(scale: anim, child: child),
+          child: widget.completed
+              ? Icon(Icons.check_circle_rounded,
+                  key: const ValueKey('checked'),
+                  color: widget.activeColor,
+                  size: 28)
+                  .animate()
+                  .scale(duration: 200.ms, curve: Curves.elasticOut)
+              : Icon(Icons.radio_button_unchecked_rounded,
+                  key: const ValueKey('unchecked'),
+                  color: widget.inactiveColor,
+                  size: 28),
+        ),
+      ),
     );
   }
 }

@@ -16,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
+import '../../widgets/session_celebration_overlay.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -40,6 +41,9 @@ class _TimerScreenState extends State<TimerScreen>
   int _phaseTotalSeconds = 25 * 60;
   int _completedSessions = 0;
   int _plannedCycles = 1;
+  // Whether this session had a Quick Check quiz (a doc was linked). When false,
+  // the verification slice is auto-granted and hidden from the breakdown.
+  bool _scoreQuizAvailable = true;
   bool _isRunning = false;
   bool _isBreak = false;
   Timer? _timer;
@@ -80,6 +84,12 @@ class _TimerScreenState extends State<TimerScreen>
   /// "ring → checkmark" celebration animation inside the timer circle before
   /// the flow advances to the Quick Check step.
   bool _isCompleteAnimating = false;
+
+  // ── Celebration overlay ──────────────────────────────────────────────────────
+  bool _showCelebration = false;
+  int _celebrationXp = 0;
+  int _celebrationMinutes = 0;
+  int _celebrationCycles = 0;
 
   // ── Verification / Quick Check state ────────────────────────────────────────
   bool _verifyLoading = false;
@@ -344,9 +354,16 @@ class _TimerScreenState extends State<TimerScreen>
             _isBreak = false;
             _currentSeconds = _workDurationMinutes * 60;
             _phaseTotalSeconds = _workDurationMinutes * 60;
-            _setFlowStep(_SessionFlowStep.verify);
           });
-          _loadVerifyQuestions();
+          // Only show Quick Check if a document was linked to this session.
+          if (_linkedDoc != null) {
+            setState(() => _setFlowStep(_SessionFlowStep.verify));
+            _loadVerifyQuestions();
+          } else {
+            // No doc → no quiz possible → don't penalise verification.
+            _saveSessionWithVerification(
+                correct: 0, total: 0, quizAvailable: false);
+          }
         });
         return;
       }
@@ -1072,6 +1089,16 @@ class _TimerScreenState extends State<TimerScreen>
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
     final showAppBar = _flowStep != _SessionFlowStep.list;
 
+    // Show celebration overlay on top of everything when session completes
+    if (_showCelebration) {
+      return SessionCelebrationOverlay(
+        xpScore: _celebrationXp,
+        focusMinutes: _celebrationMinutes,
+        cycles: _celebrationCycles,
+        onContinue: () => setState(() => _showCelebration = false),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.getBackgroundColor(isDark),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -1308,7 +1335,9 @@ class _TimerScreenState extends State<TimerScreen>
       _verifySubmitted = true;
     });
     _saveSessionWithVerification(
-        correct: correct, total: _verifyQuestions.length);
+        correct: correct,
+        total: _verifyQuestions.length,
+        quizAvailable: true);
   }
 
   void _skipVerify() {
@@ -1317,27 +1346,52 @@ class _TimerScreenState extends State<TimerScreen>
       _verifyTotal = 0;
       _verifySubmitted = true;
     });
-    _saveSessionWithVerification(correct: 0, total: 0);
+    // Skipping a real quiz still counts as 0 for verification; but if no
+    // questions ever loaded, treat it as "no quiz" so it isn't penalised.
+    _saveSessionWithVerification(
+        correct: 0, total: 0, quizAvailable: _verifyQuestions.isNotEmpty);
   }
 
   void _saveSessionWithVerification(
-      {required int correct, required int total}) {
+      {required int correct,
+      required int total,
+      required bool quizAvailable}) {
     final selectedChecklistCount =
         _checklist.where((item) => item.isSelected).length;
     final completedChecklistCount =
         _checklist.where((item) => item.isSelected && item.isCompleted).length;
 
     // Save (non-blocking) and move to summary step.
+    final score = _computeSessionScore(
+      checklistDone: completedChecklistCount,
+      checklistTotal: selectedChecklistCount,
+      cycles: _completedSessions,
+      plannedCycles: _plannedCycles,
+      verifiedCorrect: correct,
+      verifiedTotal: total,
+      quizAvailable: quizAvailable,
+    );
+
     GeminiStudyService.saveSession(
       focusMinutes: _completedSessions * _workDurationMinutes,
       cycles: _completedSessions,
+      plannedCycles: _plannedCycles,
       subject: _sessionSubjectController.text.trim(),
       checklistDone: completedChecklistCount,
       checklistTotal: selectedChecklistCount,
       verifiedCorrect: correct,
       verifiedTotal: total,
+      quizAvailable: quizAvailable,
     );
-    setState(() => _setFlowStep(_SessionFlowStep.complete));
+    UserSettingsService.addXp(score.total).ignore();
+    setState(() {
+      _scoreQuizAvailable = quizAvailable;
+      _celebrationXp = score.total;
+      _celebrationMinutes = _completedSessions * _workDurationMinutes;
+      _celebrationCycles = _completedSessions;
+      _showCelebration = true;
+      _setFlowStep(_SessionFlowStep.complete);
+    });
   }
 
   /// Same formula used in GeminiStudyService.saveSession — duplicated here
@@ -1347,16 +1401,34 @@ class _TimerScreenState extends State<TimerScreen>
     required int checklistDone,
     required int checklistTotal,
     required int cycles,
+    required int plannedCycles,
     required int verifiedCorrect,
     required int verifiedTotal,
+    required bool quizAvailable,
   }) {
+    // Cycles are scored against the user's PLAN — finishing every planned
+    // cycle earns full marks, regardless of how many that was.
+    final cycleRatio = plannedCycles > 0
+        ? (cycles / plannedCycles).clamp(0.0, 1.0)
+        : (cycles > 0 ? 1.0 : 0.0);
+    final cycleScore = (cycleRatio * 40).round();
+
     final checklistRatio =
         checklistTotal > 0 ? (checklistDone / checklistTotal).clamp(0.0, 1.0) : 0.0;
-    final cycleScore = (min(cycles, 4) * 10);
     final checklistScore = (checklistRatio * 20).round();
-    final verifyRatio =
-        verifiedTotal > 0 ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0) : 0.0;
-    final verifyScore = (verifyRatio * 30).round();
+
+    // No quiz (no linked doc) → grant the verification slice in full so a
+    // perfect session can still reach 100.
+    final int verifyScore;
+    if (!quizAvailable) {
+      verifyScore = 30;
+    } else {
+      final verifyRatio = verifiedTotal > 0
+          ? (verifiedCorrect / verifiedTotal).clamp(0.0, 1.0)
+          : 0.0;
+      verifyScore = (verifyRatio * 30).round();
+    }
+
     const base = 10;
     final total =
         (base + cycleScore + checklistScore + verifyScore).clamp(0, 100);
@@ -1373,15 +1445,19 @@ class _TimerScreenState extends State<TimerScreen>
     required int checklistDone,
     required int checklistTotal,
     required int cycles,
+    required int plannedCycles,
     required int verifiedCorrect,
     required int verifiedTotal,
+    required bool quizAvailable,
   }) {
     final s = _computeSessionScore(
       checklistDone: checklistDone,
       checklistTotal: checklistTotal,
       cycles: cycles,
+      plannedCycles: plannedCycles,
       verifiedCorrect: verifiedCorrect,
       verifiedTotal: verifiedTotal,
+      quizAvailable: quizAvailable,
     );
     final textPrimary = AppTheme.getTextPrimary(isDark);
     final textSecondary = AppTheme.getTextSecondary(isDark);
@@ -1476,24 +1552,28 @@ class _TimerScreenState extends State<TimerScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'Earned from cycles completed, checklist progress and Quick Check answers.',
+            quizAvailable
+                ? 'Earned from cycles completed, checklist progress and Quick Check answers.'
+                : 'Earned from cycles completed and checklist progress.',
             style: TextStyle(color: textSecondary, fontSize: 11, height: 1.5),
           ),
           const SizedBox(height: 8),
           Divider(color: surface, height: 1),
           row('Base', 10, 10, 'Every completed session.'),
           row('Cycles', s.cycleScore, 40,
-              '$cycles cycle${cycles == 1 ? '' : 's'} × 10 (cap 4)'),
+              '$cycles of $plannedCycles planned cycle${plannedCycles == 1 ? '' : 's'} done'),
           row('Checklist', s.checklistScore, 20,
               '$checklistDone of $checklistTotal items done'),
-          row(
-            'Verification',
-            s.verifyScore,
-            30,
-            verifiedTotal == 0
-                ? 'Skipped Quick Check — no points'
-                : '$verifiedCorrect of $verifiedTotal questions correct',
-          ),
+          // Verification only shown when a quiz actually existed.
+          if (quizAvailable)
+            row(
+              'Verification',
+              s.verifyScore,
+              30,
+              verifiedTotal == 0
+                  ? 'Skipped Quick Check — no points'
+                  : '$verifiedCorrect of $verifiedTotal questions correct',
+            ),
         ],
       ),
     );
@@ -2933,8 +3013,10 @@ class _TimerScreenState extends State<TimerScreen>
             checklistDone: done,
             checklistTotal: selected.length,
             cycles: _completedSessions,
+            plannedCycles: _plannedCycles,
             verifiedCorrect: _verifyCorrect,
             verifiedTotal: _verifyTotal,
+            quizAvailable: _scoreQuizAvailable,
           ),
           const SizedBox(height: 14),
           Container(

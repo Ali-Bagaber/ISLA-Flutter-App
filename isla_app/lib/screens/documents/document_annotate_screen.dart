@@ -86,6 +86,7 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
   // PDF-specific state — only populated when fileType == PDF
   PdfDocument? _pdfDoc;
   bool _pdfLoading = false;
+  bool _pdfError = false;
 
   static const _drawColors = [
     Colors.black,
@@ -110,12 +111,25 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
   }
 
   Future<void> _loadPdf() async {
-    setState(() => _pdfLoading = true);
+    setState(() {
+      _pdfLoading = true;
+      _pdfError = false;
+    });
     try {
       final doc = await PdfDocument.openUri(Uri.parse(widget.downloadUrl!));
-      if (mounted) setState(() { _pdfDoc = doc; _pdfLoading = false; });
+      if (mounted) {
+        setState(() {
+          _pdfDoc = doc;
+          _pdfLoading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _pdfLoading = false);
+      if (mounted) {
+        setState(() {
+          _pdfLoading = false;
+          _pdfError = true;
+        });
+      }
     }
   }
 
@@ -175,15 +189,15 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
 
   void _toggleDrawMode() => setState(() => _drawMode = !_drawMode);
 
-  void _onPointerDown(PointerDownEvent e) {
-    setState(() => _currentPoints = [e.localPosition]);
+  void _startStroke(Offset p) {
+    setState(() => _currentPoints = [p]);
   }
 
-  void _onPointerMove(PointerMoveEvent e) {
-    setState(() => _currentPoints = [..._currentPoints, e.localPosition]);
+  void _extendStroke(Offset p) {
+    setState(() => _currentPoints = [..._currentPoints, p]);
   }
 
-  void _onPointerUp(PointerUpEvent e) {
+  void _endStroke() {
     if (_currentPoints.isNotEmpty) {
       setState(() {
         _strokes.add(_Stroke(
@@ -196,6 +210,19 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
         _dirty = true;
       });
     }
+  }
+
+  /// A single tap places a dot.
+  void _placeDot(Offset p) {
+    setState(() {
+      _strokes.add(_Stroke(
+        points: [p],
+        color: _eraserMode ? Colors.white : _penColor,
+        width: _eraserMode ? 20.0 : _penWidth,
+        page: _currentPage,
+      ));
+      _dirty = true;
+    });
   }
 
   List<_Stroke> get _strokesOnCurrentPage =>
@@ -409,14 +436,20 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_pdfDoc != null)
-            ColoredBox(
-              color: Colors.white,
-              child: PdfPageView(
-                document: _pdfDoc!,
-                pageNumber: _currentPage,
-                alignment: Alignment.topCenter,
+            // RepaintBoundary keeps the rendered page cached so it doesn't
+            // re-render on every drawing point.
+            RepaintBoundary(
+              child: ColoredBox(
+                color: Colors.white,
+                child: PdfPageView(
+                  document: _pdfDoc!,
+                  pageNumber: _currentPage,
+                  alignment: Alignment.topCenter,
+                ),
               ),
             )
+          else if (_pdfError)
+            _buildPdfErrorState()
           else
             const ColoredBox(color: Colors.white),
         ] else if (hasViewer)
@@ -445,12 +478,14 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
 
         // ── Drawing layer (captures events only when Draw mode is active) ──
         if (_drawMode)
-          Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: _onPointerDown,
-            onPointerMove: _onPointerMove,
-            onPointerUp: _onPointerUp,
-            child: const SizedBox.expand(),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => _placeDot(d.localPosition),
+              onPanStart: (d) => _startStroke(d.localPosition),
+              onPanUpdate: (d) => _extendStroke(d.localPosition),
+              onPanEnd: (_) => _endStroke(),
+            ),
           ),
 
         // ── Empty-state hint ───────────────────────────────────────────────
@@ -490,6 +525,45 @@ class _DocumentAnnotateScreenState extends State<DocumentAnnotateScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildPdfErrorState() {
+    return ColoredBox(
+      color: Colors.white,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.picture_as_pdf_rounded,
+                  size: 48, color: Colors.grey.shade300),
+              const SizedBox(height: 12),
+              Text(
+                'Couldn\'t load the PDF preview',
+                style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'You can still draw notes on this page below.',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _loadPdf,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

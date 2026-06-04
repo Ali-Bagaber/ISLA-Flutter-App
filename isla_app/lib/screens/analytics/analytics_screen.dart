@@ -1428,19 +1428,49 @@ class _MarksSection extends StatelessWidget {
                       ),
                     const SizedBox(height: 12),
 
-                    // ── Type ────────────────────────────────────────────────
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedType,
-                      isExpanded: true,
-                      dropdownColor: field,
-                      style: TextStyle(color: onSurface, fontSize: 14),
-                      decoration: deco('Type'),
-                      items: types
-                          .map((t) =>
-                              DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
-                      onChanged: (v) =>
-                          setDialogState(() => selectedType = v ?? 'Quiz'),
+                    // ── Type (chips) ────────────────────────────────────────
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Type',
+                          style: TextStyle(color: onMuted, fontSize: 12)),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: types.map((t) {
+                        final sel = t == selectedType;
+                        return GestureDetector(
+                          onTap: () =>
+                              setDialogState(() => selectedType = t),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: sel
+                                  ? IslaColors.primary.withValues(alpha: 0.18)
+                                  : field,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: sel
+                                    ? IslaColors.primary
+                                    : border,
+                                width: sel ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Text(t,
+                                style: TextStyle(
+                                    color: sel
+                                        ? IslaColors.primary
+                                        : onMuted,
+                                    fontSize: 13,
+                                    fontWeight: sel
+                                        ? FontWeight.w700
+                                        : FontWeight.w500)),
+                          ),
+                        );
+                      }).toList(),
                     ),
                     const SizedBox(height: 12),
 

@@ -1238,6 +1238,33 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                   ? hourSlider(streakHour, (h) => _update({'streakHour': h}))
                   : null,
             ),
+
+            // ── Troubleshooting ────────────────────────────────────────────
+            sectionHeader('Troubleshooting'),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final status =
+                      await NotificationService.instance.sendTestNotification();
+                  messenger.showSnackBar(SnackBar(content: Text(status)));
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.notifications_active_rounded, size: 18),
+                label: const Text('Send test notification'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Fires one now and one in 15 seconds. If the scheduled one is late, '
+              'enable "Alarms & reminders" for ISLA in Android settings.',
+              style: AppTheme.bodySmall.copyWith(fontSize: 11),
+            ),
           ],
         ),
       ),

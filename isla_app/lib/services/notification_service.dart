@@ -43,6 +43,7 @@ class NotificationService {
     }
 
     tz_data.initializeTimeZones();
+    _configureLocalTimeZone();
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
@@ -69,14 +70,32 @@ class NotificationService {
     _initialised = true;
   }
 
+  /// `timezone` defaults [tz.local] to UTC until told otherwise. Without this,
+  /// scheduled alarms and daily reminders fire at the wrong wall-clock time.
+  /// We match the device's current UTC offset to a tz database location.
+  void _configureLocalTimeZone() {
+    try {
+      final offset = DateTime.now().timeZoneOffset;
+      for (final loc in tz.timeZoneDatabase.locations.values) {
+        if (tz.TZDateTime.now(loc).timeZoneOffset == offset) {
+          tz.setLocalLocation(loc);
+          return;
+        }
+      }
+    } catch (_) {
+      // Fall back to UTC — instants are still preserved for one-shot alarms.
+    }
+  }
+
   /// Whether the user has granted the "Alarms & reminders" (exact alarm)
   /// permission. When false we fall back to inexact scheduling so the
   /// notification still fires (just possibly a few minutes late).
   bool _exactAlarmsAllowed = false;
 
-  AndroidScheduleMode get _scheduleMode => _exactAlarmsAllowed
-      ? AndroidScheduleMode.exactAllowWhileIdle
-      : AndroidScheduleMode.inexactAllowWhileIdle;
+  // Always TRY exact (USE_EXACT_ALARM makes it auto-granted on reminder apps);
+  // _safeZonedSchedule falls back to inexact only if the OS rejects it.
+  AndroidScheduleMode get _scheduleMode =>
+      AndroidScheduleMode.exactAllowWhileIdle;
 
   /// Schedule [zonedSchedule] with exact mode, falling back to inexact if the
   /// OS rejects the exact alarm (permission revoked at runtime).
@@ -340,6 +359,51 @@ class NotificationService {
   Future<void> cancelDueTimeAlarm(String taskId) async {
     if (kIsWeb || !_initialised) return;
     await _plugin.cancel(_dueIdFor(taskId));
+  }
+
+  // ── Diagnostics ─────────────────────────────────────────────────────────────
+
+  /// Fires an immediate notification AND schedules one 15 seconds later, so the
+  /// user can confirm on-device that both instant and scheduled alarms work.
+  /// Returns a short status string for UI feedback.
+  Future<String> sendTestNotification() async {
+    if (!_initialised) await init();
+
+    if (kIsWeb) {
+      _webNotify('ISLA test ✅', 'Notifications are working on web.');
+      return 'Sent a browser notification.';
+    }
+
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'tasks_due',
+        'Task due alerts',
+        channelDescription: 'Notification when a task reaches its due time.',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+      ),
+      iOS: DarwinNotificationDetails(presentBanner: true, presentSound: true),
+    );
+
+    await _plugin.show(9100, 'ISLA test ✅',
+        'Instant notification works! A scheduled one will arrive in 15s.',
+        details);
+
+    final when = tz.TZDateTime.now(tz.local).add(const Duration(seconds: 15));
+    await _safeZonedSchedule(
+      9101,
+      'Scheduled alarm ⏰',
+      'This fired 15 seconds after you tapped Test — scheduling works!',
+      when,
+      details,
+      payload: 'test',
+    );
+
+    return _exactAlarmsAllowed
+        ? 'Sent now + scheduled in 15s (exact alarms ON).'
+        : 'Sent now + scheduled in ~15s (exact alarms OFF — may be delayed).';
   }
 
   // ── Pomodoro end ───────────────────────────────────────────────────────────

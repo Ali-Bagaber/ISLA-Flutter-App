@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -12,8 +13,10 @@ import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
+import '../../widgets/confetti_overlay.dart';
 import '../../widgets/hover_lift.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/streak_card.dart';
 import '../planner/add_task_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -35,6 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _completedTasks = 0;
   int _totalTasks = 0;
   int _streak = 0;
+  int _bestStreak = 0;
+  List<bool> _last7 = List.filled(7, false);
   int _totalStudyMinutes = 0;
   int _lastCelebratedStreak = 0;
   List<Map<String, dynamic>> _upcomingTasks = const [];
@@ -180,6 +185,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _totalStudyMinutes = total;
       _streak = streak;
+      _last7 = last7FromStudyDays(studyDays);
+      _bestStreak = bestStreakFromStudyDays(studyDays);
     });
     _checkStreakMilestone(streak);
   }
@@ -199,49 +206,115 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showStreakMilestone(int days) {
-    final emoji = days >= 30 ? '🏆' : days >= 14 ? '🔥' : days >= 7 ? '⭐' : '🌟';
+    const flameOrange = Color(0xFFFF7A1A);
+    const flameAmber = Color(0xFFFFB547);
+    final subtitle = days >= 30
+        ? 'Incredible dedication — a full month of studying!'
+        : days >= 14
+            ? 'Two weeks strong. You\'re building a habit!'
+            : days >= 7
+                ? 'One full week of consistent studying. Keep it up!'
+                : 'Great start — 3 days in a row!';
+
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 56)),
-            const SizedBox(height: 12),
-            Text(
-              '$days-Day Streak!',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              days >= 30
-                  ? 'Incredible dedication — a full month of studying!'
-                  : days >= 14
-                      ? 'Two weeks strong. You\'re building a habit!'
-                      : days >= 7
-                          ? 'One full week of consistent studying. Keep it up!'
-                          : 'Great start — 3 days in a row!',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Keep Going!'),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (ctx) {
+        // Fire confetti once the dialog is on screen.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ConfettiBurst.fire(ctx, particleCount: 32);
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (ctx.mounted) ConfettiBurst.fire(ctx, particleCount: 20);
+          });
+        });
+        return Dialog(
+          backgroundColor: const Color(0xFF0C1420),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: flameOrange.withValues(alpha: 0.4)),
           ),
-        ],
-      ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Glowing flame
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(colors: [
+                      flameAmber.withValues(alpha: 0.30),
+                      flameOrange.withValues(alpha: 0.04),
+                    ]),
+                    boxShadow: [
+                      BoxShadow(
+                        color: flameOrange.withValues(alpha: 0.45),
+                        blurRadius: 40,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.local_fire_department_rounded,
+                      color: flameAmber, size: 60),
+                )
+                    .animate()
+                    .scale(
+                        begin: const Offset(0.3, 0.3),
+                        end: const Offset(1, 1),
+                        duration: 600.ms,
+                        curve: Curves.elasticOut)
+                    .then()
+                    .shimmer(duration: 1200.ms, color: Colors.white24),
+                const SizedBox(height: 18),
+                TweenAnimationBuilder<int>(
+                  tween: IntTween(begin: 0, end: days),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, value, __) => ShaderMask(
+                    shaderCallback: (r) => const LinearGradient(
+                            colors: [flameAmber, flameOrange])
+                        .createShader(r),
+                    child: Text(
+                      '$value-Day Streak!',
+                      style: GoogleFonts.manrope(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ).animate(delay: 250.ms).fadeIn(),
+                const SizedBox(height: 10),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                      color: Colors.white60, fontSize: 13.5, height: 1.4),
+                  textAlign: TextAlign.center,
+                ).animate(delay: 450.ms).fadeIn(),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: flameOrange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Keep the Fire Going! 🔥',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700, fontSize: 14)),
+                  ),
+                ).animate(delay: 600.ms).fadeIn().slideY(begin: 0.3, end: 0),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -873,6 +946,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () => _openTaskActions(t),
                         );
                       }),
+
+                    const SizedBox(height: 20),
+
+                    // ── Streak ────────────────────────────────────────────
+                    StreakCard(
+                      streak: _streak,
+                      bestStreak: _bestStreak,
+                      last7: _last7,
+                      onTap: () => context.read<NavController>().goAnalytics(),
+                    ),
 
                     const SizedBox(height: 20),
 

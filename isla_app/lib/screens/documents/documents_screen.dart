@@ -5,7 +5,6 @@ import '../../theme/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/document_service.dart';
 import '../../services/nav_controller.dart';
-import '../../widgets/entrance.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
 import 'package:go_router/go_router.dart';
@@ -610,7 +609,7 @@ class _CourseSectionCard extends StatelessWidget {
                     isDark: isDark,
                     onTap: () => onDocTap(doc),
                     onAction: (action) => onDocAction(doc, action),
-                  ).entrance(index: i);
+                  );
                 },
               ),
           ],

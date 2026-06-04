@@ -45,7 +45,9 @@ class NotificationService {
     tz_data.initializeTimeZones();
     _configureLocalTimeZone();
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Must be a monochrome drawable — Android only uses the icon's alpha for
+    // the status bar, so the full-colour launcher icon shows as a white blob.
+    const androidInit = AndroidInitializationSettings('@drawable/ic_stat_isla');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,

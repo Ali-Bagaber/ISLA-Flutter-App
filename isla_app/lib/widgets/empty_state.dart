@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import 'pressable.dart';
 
 /// Friendly, consistent empty state — a softly glowing icon, a title, a
 /// supportive message and an optional call-to-action button.
+///
+/// Intentionally static (no animation library): empty states often mount in
+/// the middle of heavy list churn, and the page transition already fades it in.
 class IslaEmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -50,14 +52,7 @@ class IslaEmptyState extends StatelessWidget {
                 border: Border.all(color: color.withValues(alpha: 0.30)),
               ),
               child: Icon(icon, color: color, size: 40),
-            )
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .scale(
-                  begin: const Offset(1, 1),
-                  end: const Offset(1.06, 1.06),
-                  duration: 1800.ms,
-                  curve: Curves.easeInOut,
-                ),
+            ),
             const SizedBox(height: 18),
             Text(
               title,
@@ -112,7 +107,7 @@ class IslaEmptyState extends StatelessWidget {
             ],
           ],
         ),
-      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
+      ),
     );
   }
 }

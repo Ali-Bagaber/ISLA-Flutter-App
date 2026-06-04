@@ -250,12 +250,8 @@ class AnalyticsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bg = isDark ? IslaColors.background : const Color(0xFFF4FBFE);
-    final appBarBg = isDark ? IslaColors.background.withValues(alpha: 0.95) : const Color(0xF8FFFFFF);
     final onSurfaceMute =
         isDark ? IslaColors.onSurfaceVariant : const Color(0xFF5A6770);
-    final outlineSoft = isDark
-        ? IslaColors.outlineVariant.withValues(alpha: 0.4)
-        : const Color(0xFFD4DEE4);
 
     return Scaffold(
       backgroundColor: bg,
@@ -267,10 +263,7 @@ class AnalyticsScreen extends StatelessWidget {
               height: 64,
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: appBarBg,
-                border: Border(bottom: BorderSide(color: outlineSoft)),
-              ),
+              decoration: BoxDecoration(color: bg),
               child: Row(
                 children: [
                   const IslaLogo(markSize: 28, textSize: 17),

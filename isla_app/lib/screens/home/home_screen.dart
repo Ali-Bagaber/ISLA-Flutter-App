@@ -629,8 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 60,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: AppTheme.getAppBarBg(isDark),
-                border: Border(bottom: BorderSide(color: outlineSoft, width: 0.8)),
+                color: AppTheme.getBackgroundColor(isDark),
               ),
               child: Row(
                 children: [

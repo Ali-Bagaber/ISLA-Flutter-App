@@ -508,12 +508,7 @@ class _TasksScreenState extends State<TasksScreen> {
               height: 64,
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: palette.appBarBackground,
-                border: Border(
-                  bottom: BorderSide(color: palette.outlineSoft),
-                ),
-              ),
+              decoration: BoxDecoration(color: palette.background),
               child: Row(
                 children: [
                   const IslaLogo(markSize: 28, textSize: 17),

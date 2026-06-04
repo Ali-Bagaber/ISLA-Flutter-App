@@ -2006,103 +2006,91 @@ class _TimerScreenState extends State<TimerScreen>
     return _HoverLift(
       child: Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 14),
+        margin: const EdgeInsets.only(bottom: 10),
         child: IslaPremiumCard(
-          padding: const EdgeInsets.all(18),
-          borderRadius: 30,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(14),
+          borderRadius: 20,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: AppTheme.getSurfaceColor(isDark),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _sessionIcon(subject),
-                      color: scoreColor,
-                      size: 27,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          subject,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.headingSmall.copyWith(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.getTextPrimary(isDark),
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          rangeLabel,
-                          style: AppTheme.bodyMedium.copyWith(
-                            color: AppTheme.getTextSecondary(isDark),
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.getSurfaceColor(isDark),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _sessionIcon(subject),
+                  color: scoreColor,
+                  size: 21,
+                ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 12),
+              // Title + time + duration
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.headingSmall.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.getTextPrimary(isDark),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      rangeLabel,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.getTextSecondary(isDark),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
                       children: [
-                        Text(
-                          'DURATION',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: AppTheme.getTextSecondary(isDark),
-                            letterSpacing: 1.4,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
+                        Icon(Icons.schedule_rounded,
+                            size: 12,
+                            color: AppTheme.getTextSecondary(isDark)),
+                        const SizedBox(width: 4),
                         Text(
                           durationLabel,
-                          style: AppTheme.headingSmall.copyWith(
-                            color: AppTheme.getTextPrimary(isDark),
+                          style: AppTheme.bodySmall.copyWith(
+                            color: AppTheme.getTextSecondary(isDark),
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Score chip
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'SCORE',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: scoreColor,
+                      letterSpacing: 1.2,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'FOCUS SCORE',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: scoreColor,
-                            letterSpacing: 1.4,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$score',
-                          style: AppTheme.headingLarge.copyWith(
-                            color: scoreColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 2),
+                  Text(
+                    '$score',
+                    style: AppTheme.headingSmall.copyWith(
+                      color: scoreColor,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
                     ),
                   ),
                 ],

@@ -192,9 +192,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   Widget build(BuildContext context) {
     final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
 
-    final outlineSoft = isDark
-        ? const Color(0xFF2E3538)
-        : const Color(0xFFD4DEE4);
     final textSecondary = AppTheme.getTextSecondary(isDark);
 
     return Scaffold(
@@ -206,9 +203,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               height: 60,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: AppTheme.getAppBarBg(isDark),
-                border: Border(
-                    bottom: BorderSide(color: outlineSoft, width: 0.8)),
+                color: AppTheme.getBackgroundColor(isDark),
               ),
               child: Row(
                 children: [

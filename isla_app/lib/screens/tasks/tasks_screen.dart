@@ -9,6 +9,7 @@ import '../../services/auth_service.dart';
 import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
 import '../../widgets/confetti_overlay.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
 import '../planner/add_task_screen.dart';
@@ -566,7 +567,24 @@ class _TasksScreenState extends State<TasksScreen> {
                         _buildDateHeader(source.length, completed.length, palette),
                         const SizedBox(height: 20),
                         if (pending.isEmpty)
-                          _EmptyTasksCard(palette: palette, showCompleted: false)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 40),
+                            child: IslaEmptyState(
+                              icon: Icons.task_alt_rounded,
+                              title: completed.isNotEmpty
+                                  ? 'All caught up!'
+                                  : 'No tasks yet',
+                              message: completed.isNotEmpty
+                                  ? 'You\'ve cleared every pending task. Enjoy the calm — or plan ahead.'
+                                  : 'Add your first task and ISLA will remind you before it\'s due.',
+                              actionLabel: 'Add Task',
+                              onAction: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const AddTaskScreen()),
+                              ),
+                            ),
+                          )
                         else
                           ..._buildGroupedSections(pending, palette),
                         if (completed.isNotEmpty) ...[

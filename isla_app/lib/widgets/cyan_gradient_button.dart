@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/theme/app_colors.dart';
+import 'pressable.dart';
 
 class CyanGradientButton extends StatelessWidget {
   final String label;
@@ -16,7 +17,7 @@ class CyanGradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         height: 60,

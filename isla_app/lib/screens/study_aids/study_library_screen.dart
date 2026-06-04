@@ -5,6 +5,8 @@ import '../../services/document_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/nav_controller.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/isla_logo.dart';
 import 'quiz_screen.dart';
 
@@ -141,35 +143,17 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
                 ),
                 Expanded(
                   child: searchFiltered.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.auto_stories_outlined,
-                                  size: 64,
-                                  color: AppTheme.getTextSecondary(isDark)
-                                      .withValues(alpha: 0.45),
-                                ),
-                                const SizedBox(height: 20),
-                                Text(
-                                  snapshot.connectionState ==
-                                          ConnectionState.waiting
-                                      ? 'Loading...'
-                                      : 'No saved materials yet.\n\nGenerate summaries, flashcards or\nquizzes from My Documents!',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: AppTheme.getTextSecondary(isDark),
-                                    fontSize: 14,
-                                    height: 1.6,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
+                      ? (snapshot.connectionState == ConnectionState.waiting
+                          ? const Center(child: CircularProgressIndicator())
+                          : IslaEmptyState(
+                              icon: Icons.auto_stories_rounded,
+                              title: 'No saved materials yet',
+                              message:
+                                  'Generate summaries, flashcards or quizzes from My Documents and they\'ll appear here.',
+                              actionLabel: 'Go to Documents',
+                              onAction: () =>
+                                  context.read<NavController>().goDocs(),
+                            ))
                       : CustomScrollView(
                           slivers: [
                             SliverPadding(

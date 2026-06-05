@@ -17,6 +17,7 @@ import '../../theme/theme_provider.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
 import '../../widgets/session_celebration_overlay.dart';
+import '../../widgets/streak_celebration_overlay.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -90,6 +91,11 @@ class _TimerScreenState extends State<TimerScreen>
   int _celebrationXp = 0;
   int _celebrationMinutes = 0;
   int _celebrationCycles = 0;
+  // Streak celebration (shown after the session celebration if the streak grew)
+  bool _showStreakCelebration = false;
+  bool _streakIncreased = false;
+  int _celebrationStreak = 0;
+  List<bool> _celebrationLast7 = List.filled(7, false);
 
   // ── Verification / Quick Check state ────────────────────────────────────────
   bool _verifyLoading = false;
@@ -1095,7 +1101,20 @@ class _TimerScreenState extends State<TimerScreen>
         xpScore: _celebrationXp,
         focusMinutes: _celebrationMinutes,
         cycles: _celebrationCycles,
-        onContinue: () => setState(() => _showCelebration = false),
+        onContinue: () => setState(() {
+          _showCelebration = false;
+          // Chain into the streak celebration if today grew the streak.
+          if (_streakIncreased) _showStreakCelebration = true;
+        }),
+      );
+    }
+
+    // "A streak is born" celebration after the session one.
+    if (_showStreakCelebration) {
+      return StreakCelebrationOverlay(
+        streak: _celebrationStreak,
+        last7: _celebrationLast7,
+        onContinue: () => setState(() => _showStreakCelebration = false),
       );
     }
 
@@ -1372,17 +1391,27 @@ class _TimerScreenState extends State<TimerScreen>
       quizAvailable: quizAvailable,
     );
 
-    GeminiStudyService.saveSession(
-      focusMinutes: _completedSessions * _workDurationMinutes,
-      cycles: _completedSessions,
-      plannedCycles: _plannedCycles,
-      subject: _sessionSubjectController.text.trim(),
-      checklistDone: completedChecklistCount,
-      checklistTotal: selectedChecklistCount,
-      verifiedCorrect: correct,
-      verifiedTotal: total,
-      quizAvailable: quizAvailable,
-    );
+    // Capture streak state BEFORE saving this session, then save — so we know
+    // whether *this* session is what grew the streak today.
+    GeminiStudyService.getStreakInfo().then((info) {
+      GeminiStudyService.saveSession(
+        focusMinutes: _completedSessions * _workDurationMinutes,
+        cycles: _completedSessions,
+        plannedCycles: _plannedCycles,
+        subject: _sessionSubjectController.text.trim(),
+        checklistDone: completedChecklistCount,
+        checklistTotal: selectedChecklistCount,
+        verifiedCorrect: correct,
+        verifiedTotal: total,
+        quizAvailable: quizAvailable,
+      );
+      if (!mounted) return;
+      setState(() {
+        _streakIncreased = !info.studiedToday;
+        _celebrationStreak = info.newStreak;
+        _celebrationLast7 = info.last7;
+      });
+    });
     UserSettingsService.addXp(score.total).ignore();
     setState(() {
       _scoreQuizAvailable = quizAvailable;

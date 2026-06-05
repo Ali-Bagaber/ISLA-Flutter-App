@@ -7,6 +7,7 @@ import '../../services/document_service.dart';
 import '../../services/nav_controller.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
+import '../../widgets/page_entrance.dart';
 import 'package:go_router/go_router.dart';
 import '../study_aids/summary_screen.dart';
 import '../study_aids/flashcards_screen.dart';
@@ -226,7 +227,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               ),
             ),
             Expanded(
-              child: Container(
+              child: PageEntrance(
+                child: Container(
         decoration: AppTheme.getBackgroundDecoration(isDark),
         child: StreamBuilder<List<Map<String, dynamic>>>(
           stream: DocumentService.watchCourses(),
@@ -404,6 +406,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             );
           },
         ),
+            ),
             ),
           ),
         ],

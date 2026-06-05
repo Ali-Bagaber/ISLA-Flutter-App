@@ -16,6 +16,7 @@ import '../../theme/theme_provider.dart';
 import '../../widgets/confetti_overlay.dart';
 import '../../widgets/hover_lift.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/page_entrance.dart';
 import '../../widgets/streak_card.dart';
 import '../planner/add_task_screen.dart';
 
@@ -652,7 +653,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // ── Scrollable body ───────────────────────────────────────────
             Expanded(
-              child: SingleChildScrollView(
+              child: PageEntrance(
+                child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1104,6 +1106,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
           ],

@@ -8,6 +8,7 @@ import '../../services/gemini_study_service.dart';
 import '../../services/nav_controller.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/page_entrance.dart';
 import 'quiz_screen.dart';
 
 class StudyLibraryScreen extends StatefulWidget {
@@ -84,7 +85,8 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
+      body: PageEntrance(
+        child: StreamBuilder<List<Map<String, dynamic>>>(
         stream: GeminiStudyService.watchStudyMaterials(),
         builder: (context, snapshot) {
           final allMaterials = snapshot.data ?? [];
@@ -201,6 +203,7 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

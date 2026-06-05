@@ -600,6 +600,51 @@ class GeminiStudyService {
             (snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 
+  /// One-time read of the user's sessions to work out the streak. Call this
+  /// BEFORE saving a new session: [studiedToday] tells you whether today
+  /// already had a session, so a new one will *increase* the streak when false.
+  /// Returns the streak as it will be once today is counted, plus the last-7-day
+  /// activity (oldest → newest, index 6 == today).
+  static Future<({bool studiedToday, int newStreak, List<bool> last7})>
+      getStreakInfo() async {
+    final db = _db;
+    final userId = _userId;
+    if (db == null || userId == null) {
+      return (studiedToday: false, newStreak: 1, last7: List.filled(7, false));
+    }
+    final studyDays = <DateTime>{};
+    try {
+      final snap = await db
+          .collection('sessions')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (final d in snap.docs) {
+        final raw = d.data()['timestamp'];
+        DateTime? ts;
+        if (raw is Timestamp) ts = raw.toDate();
+        if (ts != null) studyDays.add(DateTime(ts.year, ts.month, ts.day));
+      }
+    } catch (_) {}
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final studiedToday = studyDays.contains(today);
+
+    // Count the streak as if today is included.
+    studyDays.add(today);
+    var streak = 0;
+    var cursor = today;
+    while (studyDays.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    final last7 = List<bool>.generate(
+        7, (i) => studyDays.contains(today.subtract(Duration(days: 6 - i))));
+
+    return (studiedToday: studiedToday, newStreak: streak, last7: last7);
+  }
+
   static Future<void> saveSession({
     required int focusMinutes,
     required int cycles,

@@ -11,6 +11,7 @@ import '../../services/task_service.dart';
 import '../../widgets/confetti_overlay.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/page_entrance.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
 import '../planner/add_task_screen.dart';
 
@@ -531,7 +532,8 @@ class _TasksScreenState extends State<TasksScreen> {
               ),
             ),
             Expanded(
-              child: StreamBuilder<List<Map<String, dynamic>>>(
+              child: PageEntrance(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: TaskService.watchTasks(),
                 builder: (context, snapshot) {
                   final fetched = _mapFirestoreTasks(snapshot.data ?? const []);
@@ -595,6 +597,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     ),
                   );
                 },
+                ),
               ),
             ),
           ],

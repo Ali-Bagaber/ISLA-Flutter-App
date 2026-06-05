@@ -15,6 +15,7 @@ import '../../services/nav_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/isla_logo.dart';
 import '../../widgets/notifications_inbox_sheet.dart';
+import '../../widgets/page_entrance.dart';
 import 'gpa_calculator_screen.dart';
 
 class AnalyticsScreen extends StatelessWidget {
@@ -286,7 +287,8 @@ class AnalyticsScreen extends StatelessWidget {
             ),
             // ── Content ───────────────────────────────────────────────────
             Expanded(
-              child: StreamBuilder<Map<String, dynamic>>(
+              child: PageEntrance(
+                child: StreamBuilder<Map<String, dynamic>>(
                 stream: _analyticsStream(),
                 builder: (context, analyticsSnap) {
                   final analytics = analyticsSnap.data ?? {};
@@ -715,6 +717,7 @@ class AnalyticsScreen extends StatelessWidget {
                     },
                   );
                 },
+              ),
               ),
             ),
             // close Expanded(child: StreamBuilder)

@@ -1,2 +1,2 @@
-# Claude Code local settings (not for version control)
-.claude/settings.local.json
+# Local dev tooling
+.claude/

@@ -38,6 +38,14 @@ service cloud.firestore {
       allow create:         if isAuth() && isWritingOwn();
       allow update, delete: if isAuth() && isOwner();
     }
+    // Hand-drawn annotations live in a subcollection of each document. Access is
+    // granted by ownership of the PARENT document, which also works before the
+    // annotations doc exists (so loading an un-annotated PDF isn't denied).
+    match /documents/{docId}/annotations/{annotationId} {
+      allow read, write: if isAuth() &&
+        get(/databases/$(database)/documents/documents/$(docId)).data.userId
+          == request.auth.uid;
+    }
     match /courses/{docId} {
       allow read:           if isAuth() && isOwner();
       allow create:         if isAuth() && isWritingOwn();

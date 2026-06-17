@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/database_schema_service.dart';
 import '../services/nav_controller.dart';
 import '../services/notification_service.dart';
+import '../services/task_service.dart';
 import '../services/user_settings_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
@@ -49,6 +50,9 @@ class _MainNavigationState extends State<MainNavigation> {
     super.initState();
     _bootstrapSchema();
     _runMissedStudyCheck();
+    // Local alarms are cleared on reboot / reinstall — re-arm them from the
+    // tasks in Firestore (the source of truth) every launch.
+    TaskService.rescheduleAllReminders();
   }
 
   /// Once-per-launch: if yesterday was one of the user's planned study days
@@ -375,100 +379,191 @@ class _ProfilePage extends StatelessWidget {
                 ],
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
-              // ── Avatar + Name ─────────────────────────────────────────────
-              Center(
-                child: Column(
-                  children: [
-                    Container(
-                      width: 88,
-                      height: 88,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF00E3FD), Color(0xFF6BB9FF)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primary.withValues(alpha: 0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: user?.photoURL != null
-                          ? ClipOval(
-                              child: Image.network(
-                                user!.photoURL!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Center(
-                                  child: Text(
-                                    initials,
-                                    style: GoogleFonts.manrope(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 28,
-                                    ),
-                                  ),
+              // ── Hero card ─────────────────────────────────────────────────
+              StreamBuilder<DocumentSnapshot>(
+                stream: user != null
+                    ? FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .snapshots()
+                    : const Stream.empty(),
+                builder: (context, snap) {
+                  final data = snap.data?.data() as Map<String, dynamic>?;
+                  final studentId = data?['studentId'] as String? ?? '';
+                  final faculty = data?['faculty'] as String? ?? '';
+                  final semRaw = data?['semester'];
+                  final semester = (semRaw != null &&
+                          semRaw.toString().isNotEmpty &&
+                          semRaw.toString() != '0')
+                      ? semRaw.toString()
+                      : '';
+                  final hasAcademic =
+                      studentId.isNotEmpty || faculty.isNotEmpty || semester.isNotEmpty;
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: outlineSoft),
+                    ),
+                    child: Column(
+                      children: [
+                        // Avatar with edit badge
+                        Stack(
+                          children: [
+                            Container(
+                              width: 92,
+                              height: 92,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF00E3FD), Color(0xFF6BB9FF)],
                                 ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: primary.withValues(alpha: 0.35),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
                               ),
-                            )
-                          : Center(
-                              child: Text(
-                                initials,
-                                style: GoogleFonts.manrope(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 28,
+                              child: user?.photoURL != null
+                                  ? ClipOval(
+                                      child: Image.network(
+                                        user!.photoURL!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Center(
+                                          child: Text(initials,
+                                              style: GoogleFonts.manrope(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 30)),
+                                        ),
+                                      ),
+                                    )
+                                  : Center(
+                                      child: Text(initials,
+                                          style: GoogleFonts.manrope(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 30)),
+                                    ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () => _showEditProfileSheet(
+                                    context, displayName, studentId, faculty, semester),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: bg, width: 2),
+                                  ),
+                                  child: const Icon(Icons.edit_rounded,
+                                      color: Colors.white, size: 12),
                                 ),
                               ),
                             ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      displayName,
-                      style: GoogleFonts.manrope(
-                        color: textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 22,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      email,
-                      style: GoogleFonts.inter(
-                        color: textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => _showEditProfileDialog(context, displayName),
-                      icon: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.primaryColor),
-                      label: Text(
-                        'Edit Profile',
-                        style: GoogleFonts.inter(
-                          color: primary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                          ],
                         ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: primary.withValues(alpha: 0.4)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                        const SizedBox(height: 14),
+                        Text(displayName,
+                            style: GoogleFonts.manrope(
+                                color: textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 22)),
+                        const SizedBox(height: 3),
+                        Text(email,
+                            style: GoogleFonts.inter(
+                                color: textSecondary, fontSize: 13)),
+
+                        // Academic chips
+                        if (hasAcademic) ...[
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              if (studentId.isNotEmpty)
+                                _AcademicChip(
+                                    icon: Icons.badge_outlined,
+                                    label: studentId,
+                                    primary: primary,
+                                    isDark: isDark),
+                              if (faculty.isNotEmpty)
+                                _AcademicChip(
+                                    icon: Icons.school_outlined,
+                                    label: faculty,
+                                    primary: primary,
+                                    isDark: isDark),
+                              if (semester.isNotEmpty)
+                                _AcademicChip(
+                                    icon: Icons.calendar_today_rounded,
+                                    label: 'Sem $semester',
+                                    primary: primary,
+                                    isDark: isDark),
+                            ],
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 10),
+                          GestureDetector(
+                            onTap: () => _showEditProfileSheet(
+                                context, displayName, '', '', ''),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.add_circle_outline_rounded,
+                                    color: primary.withValues(alpha: 0.65),
+                                    size: 14),
+                                const SizedBox(width: 4),
+                                Text('Add academic info',
+                                    style: GoogleFonts.inter(
+                                        color: primary.withValues(alpha: 0.65),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showEditProfileSheet(
+                                context, displayName, studentId, faculty, semester),
+                            icon: const Icon(Icons.edit_rounded,
+                                size: 14, color: AppTheme.primaryColor),
+                            label: Text('Edit Profile',
+                                style: GoogleFonts.inter(
+                                    color: primary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13)),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: primary.withValues(alpha: 0.4)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               // ── Appearance ────────────────────────────────────────────────
               _SectionLabel(label: 'Preferences', textColor: textSecondary),
@@ -656,6 +751,31 @@ class _ProfilePage extends StatelessWidget {
               // ── Log Out ───────────────────────────────────────────────────
               InkWell(
                 onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Log out?'),
+                      content: const Text(
+                        'You will be signed out of ISLA. Your data is saved and '
+                        'will be waiting when you log back in.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF4D4D),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Log Out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true) return;
                   await AuthService.signOut();
                   if (context.mounted) context.goNamed('splash');
                 },
@@ -695,58 +815,127 @@ class _ProfilePage extends StatelessWidget {
     );
   }
 
-  // ── Edit Profile ──────────────────────────────────────────────────────────
-  Future<void> _showEditProfileDialog(
-      BuildContext context, String currentName) async {
-    final ctrl = TextEditingController(text: currentName);
-    final newName = await showDialog<String>(
+  // ── Edit Profile sheet ───────────────────────────────────────────────────
+  void _showEditProfileSheet(BuildContext context, String name,
+      String studentId, String faculty, String semester) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final nameCtrl = TextEditingController(text: name);
+    final idCtrl = TextEditingController(text: studentId);
+    final facCtrl = TextEditingController(text: faculty);
+    final semCtrl = TextEditingController(text: semester);
+
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Profile'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Display name',
-            border: OutlineInputBorder(),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF111415) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('Edit Profile',
+                  style: GoogleFonts.manrope(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: isDark
+                          ? const Color(0xFFE8F4F7)
+                          : const Color(0xFF0F1A1F))),
+              const SizedBox(height: 20),
+              _EditField(ctrl: nameCtrl, label: 'Display Name', icon: Icons.person_outline_rounded),
+              const SizedBox(height: 12),
+              _EditField(ctrl: idCtrl, label: 'Student ID', icon: Icons.badge_outlined),
+              const SizedBox(height: 12),
+              _EditField(ctrl: facCtrl, label: 'Faculty', icon: Icons.school_outlined),
+              const SizedBox(height: 12),
+              _EditField(
+                  ctrl: semCtrl,
+                  label: 'Semester',
+                  icon: Icons.calendar_today_rounded,
+                  keyboardType: TextInputType.number),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _saveProfile(
+                      context,
+                      nameCtrl.text.trim(),
+                      idCtrl.text.trim(),
+                      facCtrl.text.trim(),
+                      semCtrl.text.trim(),
+                    );
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('Save Changes',
+                      style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
-    if (newName == null || newName.isEmpty) return;
+  }
+
+  Future<void> _saveProfile(BuildContext context, String name,
+      String studentId, String faculty, String semester) async {
     try {
-      await FirebaseAuth.instance.currentUser?.updateDisplayName(newName);
+      if (name.isNotEmpty) {
+        await FirebaseAuth.instance.currentUser?.updateDisplayName(name);
+      }
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null && Firebase.apps.isNotEmpty) {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
-            .set({'displayName': newName}, SetOptions(merge: true));
+            .set({
+          if (name.isNotEmpty) 'displayName': name,
+          if (name.isNotEmpty) 'name': name,
+          if (studentId.isNotEmpty) 'studentId': studentId,
+          if (faculty.isNotEmpty) 'faculty': faculty,
+          'semester': semester.isNotEmpty
+              ? (int.tryParse(semester) ?? semester)
+              : 0,
+        }, SetOptions(merge: true));
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated')),
+          const SnackBar(
+              content: Text('Profile updated'),
+              backgroundColor: AppTheme.primaryColor),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Update failed: $e')));
       }
     }
   }
@@ -892,6 +1081,77 @@ class _HelpTip extends StatelessWidget {
   }
 }
 
+class _AcademicChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color primary;
+  final bool isDark;
+
+  const _AcademicChip({
+    required this.icon,
+    required this.label,
+    required this.primary,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: isDark ? 0.12 : 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: primary, size: 12),
+          const SizedBox(width: 4),
+          Text(label,
+              style: GoogleFonts.inter(
+                  color: primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String label;
+  final IconData icon;
+  final TextInputType? keyboardType;
+
+  const _EditField({
+    required this.ctrl,
+    required this.label,
+    required this.icon,
+    this.keyboardType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextField(
+      controller: ctrl,
+      keyboardType: keyboardType,
+      style: GoogleFonts.inter(
+          color: isDark ? const Color(0xFFE8F4F7) : const Color(0xFF0F1A1F),
+          fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 18),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+    );
+  }
+}
+
 class _SectionLabel extends StatelessWidget {
   final String label;
   final Color textColor;
@@ -1025,17 +1285,61 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   Future<void> _update(Map<String, dynamic> patch) async {
     setState(() => patch.forEach((k, v) => _n[k] = v));
     await UserSettingsService.saveNotifications(
-      taskReminders:    patch['taskReminders']    as bool?,
-      pomodoroAlerts:   patch['pomodoroAlerts']   as bool?,
-      streakReminder:   patch['streakReminder']   as bool?,
-      streakHour:       patch['streakHour']       as int?,
+      taskReminders:     patch['taskReminders']     as bool?,
+      pomodoroAlerts:    patch['pomodoroAlerts']    as bool?,
+      streakReminder:    patch['streakReminder']    as bool?,
+      streakHour:        patch['streakHour']        as int?,
       sessionStartAlert: patch['sessionStartAlert'] as bool?,
       sessionHalfAlert:  patch['sessionHalfAlert']  as bool?,
-      morningReminder:  patch['morningReminder']  as bool?,
-      morningHour:      patch['morningHour']      as int?,
-      eveningReminder:  patch['eveningReminder']  as bool?,
-      eveningHour:      patch['eveningHour']      as int?,
+      morningReminder:   patch['morningReminder']   as bool?,
+      morningHour:       patch['morningHour']       as int?,
+      eveningReminder:   patch['eveningReminder']   as bool?,
+      eveningHour:       patch['eveningHour']       as int?,
     );
+    // Apply settings immediately — schedule or cancel as needed.
+    _applySideEffects(patch);
+  }
+
+  void _applySideEffects(Map<String, dynamic> patch) {
+    final svc = NotificationService.instance;
+
+    // Morning reminder
+    if (patch.containsKey('morningReminder') || patch.containsKey('morningHour')) {
+      final on   = _bool('morningReminder', false);
+      final hour = _int('morningHour', 8);
+      if (on) {
+        svc.scheduleMorningReminder(hour: hour);
+      } else {
+        svc.cancelMorningReminder();
+      }
+    }
+
+    // Evening reminder
+    if (patch.containsKey('eveningReminder') || patch.containsKey('eveningHour')) {
+      final on   = _bool('eveningReminder', false);
+      final hour = _int('eveningHour', 20);
+      if (on) {
+        svc.scheduleEveningReminder(hour: hour);
+      } else {
+        svc.cancelEveningReminder();
+      }
+    }
+
+    // Streak reminder
+    if (patch.containsKey('streakReminder') || patch.containsKey('streakHour')) {
+      final on   = _bool('streakReminder', true);
+      final hour = _int('streakHour', 20);
+      if (on) {
+        svc.scheduleDailyStreakReminder(hour: hour);
+      } else {
+        svc.cancelDailyStreakReminder();
+      }
+    }
+
+    // Task reminders: when turned OFF cancel all scheduled advance reminders.
+    if (patch.containsKey('taskReminders') && patch['taskReminders'] == false) {
+      TaskService.cancelAllTaskReminders();
+    }
   }
 
   bool _bool(String key, bool def) => (_n[key] as bool?) ?? def;

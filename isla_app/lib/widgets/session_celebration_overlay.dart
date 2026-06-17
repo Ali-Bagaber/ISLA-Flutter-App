@@ -57,13 +57,13 @@ class _SessionCelebrationOverlayState
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(0, -0.2),
             radius: 1.1,
             colors: [
-              const Color(0xFF0A1B33),
-              const Color(0xFF020B18),
+              Color(0xFF0A1B33),
+              Color(0xFF020B18),
             ],
           ),
         ),
@@ -73,7 +73,7 @@ class _SessionCelebrationOverlayState
               const Spacer(flex: 2),
 
               // ── Glowing checkmark icon ─────────────────────────────────────
-              _GlowingCheckIcon()
+              const _GlowingCheckIcon()
                   .animate()
                   .scale(
                     begin: const Offset(0.3, 0.3),
@@ -86,7 +86,7 @@ class _SessionCelebrationOverlayState
               const SizedBox(height: 28),
 
               // ── Title ──────────────────────────────────────────────────────
-              Text(
+              const Text(
                 'Session Complete!',
                 style: TextStyle(
                   fontFamily: 'Manrope',

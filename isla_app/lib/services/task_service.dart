@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
 import 'user_settings_service.dart';
@@ -181,11 +182,77 @@ class TaskService {
     );
   }
 
+  /// Re-schedule local notifications for every incomplete task with a future
+  /// due date. Local alarms are wiped on reboot / app reinstall, and Firestore
+  /// is the source of truth — so call this once after login / app start.
+  static Future<void> rescheduleAllReminders() async {
+    final col = _col;
+    final userId = _userId;
+    if (col == null || userId == null) return;
+    final now = DateTime.now();
+    try {
+      final snap = await col.where('userId', isEqualTo: userId).get();
+      var scheduled = 0;
+      for (final d in snap.docs) {
+        final data = d.data() as Map<String, dynamic>;
+        if (data['completed'] == true) continue;
+        final due = _toDateTime(data['dueDate']);
+        if (!due.isAfter(now)) continue; // past → nothing to schedule
+        final title = data['title'] as String? ?? 'Task';
+        final subject = data['subject'] as String? ?? '';
+        final priority = data['priority'] as String? ?? 'Medium';
+        final setReminder = data['setReminder'] as bool? ?? true;
+        if (setReminder) {
+          await NotificationService.instance.scheduleTaskReminder(
+            taskId: d.id,
+            title: title,
+            subject: subject,
+            dueDate: due,
+            priority: priority,
+            hoursBefore: 6,
+          );
+        }
+        await NotificationService.instance.scheduleDueTimeAlarm(
+          taskId: d.id,
+          title: title,
+          subject: subject,
+          dueDate: due,
+          priority: priority,
+        );
+        scheduled++;
+      }
+      if (kDebugMode) {
+        debugPrint('NOTIF ── rescheduled $scheduled future task(s) on start');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('NOTIF ── reschedule failed: $e');
+    }
+  }
+
   /// Delete a task
   static Future<void> deleteTask(String id) async {
     if (_userId == null) return;
     await NotificationService.instance.cancelTaskReminder(id);
     await NotificationService.instance.cancelDueTimeAlarm(id);
     await _col?.doc(id).delete();
+  }
+
+  /// Cancel advance reminders for ALL active tasks (called when the user
+  /// turns off task reminders in Settings). Due-time alarms are preserved.
+  static Future<void> cancelAllTaskReminders() async {
+    final col = _col;
+    final uid = _userId;
+    if (col == null || uid == null) return;
+    try {
+      final snap = await col
+          .where('userId', isEqualTo: uid)
+          .where('completed', isEqualTo: false)
+          .get();
+      for (final doc in snap.docs) {
+        await NotificationService.instance.cancelTaskReminder(doc.id);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('TaskService.cancelAllTaskReminders: $e');
+    }
   }
 }

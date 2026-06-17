@@ -15,13 +15,22 @@ import 'login_screen.dart';
 ///   3. Signed in + onboardingComplete is false (new account, first run)
 ///      → push to /onboard/intention so they go through goal + personalize
 ///   4. Signed in + onboardingComplete is true → MainNavigation
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   final int initialTabIndex;
 
   const AuthGate({
     super.key,
     this.initialTabIndex = 0,
   });
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  // Cache the future per uid so auth-stream re-emissions don't re-fetch.
+  Future<Map<String, dynamic>>? _settingsFuture;
+  String? _lastUid;
 
   @override
   Widget build(BuildContext context) {
@@ -33,14 +42,22 @@ class AuthGate extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (authSnap.data == null) {
+        final user = authSnap.data;
+        if (user == null) {
+          // Reset cache on sign-out so the next sign-in re-checks.
+          _settingsFuture = null;
+          _lastUid = null;
           return const LoginScreen();
         }
 
-        // Signed in — check onboarding state once. We use FutureBuilder
-        // (not Stream) so this only runs at gate entry, not on every doc edit.
+        // Only create a new Future when the uid changes (fresh login).
+        if (_settingsFuture == null || _lastUid != user.uid) {
+          _lastUid = user.uid;
+          _settingsFuture = UserSettingsService.loadSettings();
+        }
+
         return FutureBuilder<Map<String, dynamic>>(
-          future: UserSettingsService.loadSettings(),
+          future: _settingsFuture,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -52,8 +69,19 @@ class AuthGate extends StatelessWidget {
                 const {};
             final done = plan['onboardingComplete'] == true;
             if (!done) {
-              // Defer the navigation until after this frame so we don't
-              // navigate during build().
+              // Only send truly new accounts through onboarding.
+              // Existing users whose settings doc was never created get
+              // auto-completed so they land on the home screen directly.
+              final createdAt = user.metadata.creationTime;
+              final isNewAccount = createdAt == null ||
+                  DateTime.now().difference(createdAt).inMinutes < 10;
+
+              if (!isNewAccount) {
+                // Mark complete silently so this never triggers again.
+                UserSettingsService.saveStudyPlan(onboardingComplete: true);
+                return const MainNavigation();
+              }
+
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (context.mounted) context.goNamed('intention');
               });

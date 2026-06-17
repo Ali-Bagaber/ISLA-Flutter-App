@@ -65,7 +65,7 @@ class _StreakCelebrationOverlayState extends State<StreakCelebrationOverlay> {
                 const Spacer(flex: 2),
 
                 // ── Glossy flame ───────────────────────────────────────────
-                _GlossyFlame(size: 150)
+                const _GlossyFlame(size: 150)
                     .animate()
                     .scale(
                       begin: const Offset(0.2, 0.2),

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,9 @@ import 'theme/theme_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Hive must be initialised before ThemeProvider.load() reads the box.
+  await Hive.initFlutter();
+
   if (FirebaseRuntimeConfig.isConfigured) {
     await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
   }
@@ -34,14 +38,16 @@ Future<void> main() async {
   }
 
   await NotificationService.instance.init();
-  // Daily 8 PM streak reminder — schedules once, repeats daily.
-  await NotificationService.instance.scheduleDailyStreakReminder();
+
+  // Restore persisted theme before building the widget tree.
+  final themeProvider = ThemeProvider();
+  await themeProvider.load();
 
   runApp(
     ProviderScope(
       child: provider_pkg.MultiProvider(
         providers: [
-          provider_pkg.ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          provider_pkg.ChangeNotifierProvider.value(value: themeProvider),
           provider_pkg.ChangeNotifierProvider(create: (_) => NavController()),
         ],
         child: const IslaApp(),

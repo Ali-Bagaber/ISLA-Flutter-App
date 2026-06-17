@@ -34,8 +34,13 @@ class _TimerScreenState extends State<TimerScreen>
   int _workDurationMinutes = 25;
   int _breakDurationMinutes = 5;
   int _defaultCycles = 4;
+
+  // Notification preference flags — loaded alongside focus prefs.
+  bool _notifSessionStart = true;
+  bool _notifHalfway     = false;
+  bool _notifCycleEnd    = true;
+  bool _halfwayFired     = false; // reset each work phase
   static const Duration _checklistRequestCooldown = Duration(seconds: 3);
-  static const Duration _minimumChecklistLoadingDuration = Duration(seconds: 3);
 
   // Seeded with the default work duration (25); overridden after settings load.
   int _currentSeconds = 25 * 60;
@@ -124,17 +129,20 @@ class _TimerScreenState extends State<TimerScreen>
     try {
       final s = await UserSettingsService.loadSettings();
       final f = (s['focus'] as Map?)?.cast<String, dynamic>() ?? {};
-      final work = (f['workMinutes'] as num?)?.toInt() ?? 25;
-      final brk = (f['breakMinutes'] as num?)?.toInt() ?? 5;
-      final cycles = (f['cycles'] as num?)?.toInt() ?? 4;
+      final n = (s['notifications'] as Map?)?.cast<String, dynamic>() ?? {};
+      final work   = (f['workMinutes']  as num?)?.toInt() ?? 25;
+      final brk    = (f['breakMinutes'] as num?)?.toInt() ?? 5;
+      final cycles = (f['cycles']       as num?)?.toInt() ?? 4;
       if (!mounted) return;
       setState(() {
-        _workDurationMinutes = work;
+        _workDurationMinutes  = work;
         _breakDurationMinutes = brk;
-        _defaultCycles = cycles;
-        // Only seed the counters if the timer hasn't started yet.
+        _defaultCycles        = cycles;
+        _notifSessionStart    = (n['sessionStartAlert'] as bool?) ?? true;
+        _notifHalfway         = (n['sessionHalfAlert']  as bool?) ?? false;
+        _notifCycleEnd        = (n['pomodoroAlerts']     as bool?) ?? true;
         if (!_isRunning && _completedSessions == 0) {
-          _currentSeconds = work * 60;
+          _currentSeconds    = work * 60;
           _phaseTotalSeconds = work * 60;
         }
       });
@@ -165,14 +173,37 @@ class _TimerScreenState extends State<TimerScreen>
   void _startTimer() {
     final selectedCount = _checklist.where((item) => item.isSelected).length;
     setState(() {
-      _plannedCycles = selectedCount > 0 ? selectedCount : _defaultCycles;
+      _plannedCycles     = selectedCount > 0 ? selectedCount : _defaultCycles;
       _phaseTotalSeconds = max(_phaseTotalSeconds, _currentSeconds);
-      _isRunning = true;
+      _isRunning         = true;
+      _halfwayFired      = false;
     });
+
+    // Session-start alert (only on first cycle, not on resume after break).
+    if (_notifSessionStart && _completedSessions == 0 && !_isBreak) {
+      NotificationService.instance.showSessionStart(
+        subject: _sessionSubjectController.text.trim().isEmpty
+            ? null
+            : _sessionSubjectController.text.trim(),
+      );
+    }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_currentSeconds > 0) {
         setState(() => _currentSeconds--);
+        // Halfway reminder — fires once per work phase at the midpoint.
+        if (_notifHalfway && !_isBreak && !_halfwayFired) {
+          final halfPoint = (_phaseTotalSeconds / 2).round();
+          if (_currentSeconds == halfPoint) {
+            _halfwayFired = true;
+            NotificationService.instance.showHalfwayReminder(
+              minutesLeft: (_currentSeconds / 60).ceil(),
+              subject: _sessionSubjectController.text.trim().isEmpty
+                  ? null
+                  : _sessionSubjectController.text.trim(),
+            );
+          }
+        }
       } else {
         _onTimerComplete();
       }
@@ -326,11 +357,14 @@ class _TimerScreenState extends State<TimerScreen>
     setState(() => _isRunning = false);
 
     if (!_isBreak) {
-      // Fire a system notification so the user knows the focus block ended
-      // even if the app is backgrounded.
-      NotificationService.instance.showPomodoroComplete(
-        subject: _sessionSubjectController.text.trim(),
-      );
+      // Cycle-complete notification (respects user's toggle).
+      if (_notifCycleEnd) {
+        NotificationService.instance.showPomodoroComplete(
+          subject: _sessionSubjectController.text.trim(),
+        );
+      }
+      // Reset halfway flag so the next cycle can fire it again.
+      _halfwayFired = false;
 
       var allDoneNow = false;
       setState(() {
@@ -822,7 +856,6 @@ class _TimerScreenState extends State<TimerScreen>
       return;
     }
 
-    final startedAt = DateTime.now();
     final now = DateTime.now();
     var queuedDelay = Duration.zero;
     if (_lastChecklistRequestAt != null) {
@@ -879,10 +912,6 @@ class _TimerScreenState extends State<TimerScreen>
         _checklistError = isRetry ? 'Retry failed: $message' : message;
       });
     } finally {
-      final elapsed = DateTime.now().difference(startedAt);
-      if (elapsed < _minimumChecklistLoadingDuration) {
-        await Future.delayed(_minimumChecklistLoadingDuration - elapsed);
-      }
       if (mounted) {
         setState(() => _isGeneratingChecklist = false);
       }
@@ -1642,8 +1671,8 @@ class _TimerScreenState extends State<TimerScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     Icon(Icons.help_outline_rounded,
                         color: AppTheme.primaryColor, size: 20),
                     SizedBox(width: 8),
@@ -1672,8 +1701,8 @@ class _TimerScreenState extends State<TimerScreen>
             Container(
               padding: const EdgeInsets.symmetric(vertical: 60),
               alignment: Alignment.center,
-              child: Column(
-                children: const [
+              child: const Column(
+                children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 14),
                   Text('Generating questions from your study material...',
@@ -2355,7 +2384,7 @@ class _TimerScreenState extends State<TimerScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.add_rounded,
                 color: AppTheme.primaryColor,
                 size: 24,
@@ -2498,7 +2527,7 @@ class _TimerScreenState extends State<TimerScreen>
                               ? ''
                               : cur;
                       return DropdownButtonFormField<String>(
-                        value: validVal,
+                        initialValue: validVal,
                         decoration: const InputDecoration(
                           labelText: 'Session subject (optional)',
                           prefixIcon: Icon(Icons.book_outlined, size: 18),
@@ -3479,7 +3508,7 @@ class _TimerScreenState extends State<TimerScreen>
     const dotCount = 10;
     final center = size / 2;
     final radius = (ringSize / 2) + (ringStroke / 2) + 9;
-    final angleStep = (2 * pi) / dotCount;
+    const angleStep = (2 * pi) / dotCount;
     final activeDot = ((_progress * dotCount).floor()).clamp(0, dotCount - 1);
 
     return IgnorePointer(
@@ -3644,40 +3673,12 @@ class _TimerScreenState extends State<TimerScreen>
           ),
           const SizedBox(height: 10),
           // ── Course / subject dropdown (AI Generator panel) ──────────────
-          StreamBuilder<List<Map<String, dynamic>>>(
-            stream: DocumentService.watchCourses(),
-            builder: (context, snap) {
-              final courses = snap.data ?? [];
-              final seenNames2 = <String>{};
-              final items = <DropdownMenuItem<String>>[
-                const DropdownMenuItem(
-                  value: '',
-                  child: Text('None'),
-                ),
-                ...courses
-                    .map((c) => (c['name'] as String? ?? '').trim())
-                    .where((name) => name.isNotEmpty && seenNames2.add(name))
-                    .map((name) =>
-                        DropdownMenuItem(value: name, child: Text(name))),
-              ];
-              final cur = _selectedSessionSubject;
-              final validVal =
-                  (cur == null || !items.any((i) => i.value == cur)) ? '' : cur;
-              return DropdownButtonFormField<String>(
-                value: validVal,
-                decoration: const InputDecoration(
-                  labelText: 'Session subject (optional)',
-                  prefixIcon: Icon(Icons.book_outlined, size: 18),
-                ),
-                items: items,
-                onChanged: (v) {
-                  setState(() {
-                    _selectedSessionSubject = v;
-                    _sessionSubjectController.text = v ?? '';
-                  });
-                },
-              );
-            },
+          _SubjectDropdown(
+            selectedValue: _selectedSessionSubject,
+            onChanged: (v) => setState(() {
+              _selectedSessionSubject = v;
+              _sessionSubjectController.text = v ?? '';
+            }),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -4949,6 +4950,49 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 4),
         Text(label, style: AppTheme.bodySmall),
       ],
+    );
+  }
+}
+
+/// Isolated widget so Firestore course-stream rebuilds don't touch the
+/// parent checklist card on every event.
+class _SubjectDropdown extends StatelessWidget {
+  final String? selectedValue;
+  final ValueChanged<String?> onChanged;
+
+  const _SubjectDropdown({
+    required this.selectedValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: DocumentService.watchCourses(),
+      builder: (context, snap) {
+        final courses = snap.data ?? [];
+        final seenNames = <String>{};
+        final items = <DropdownMenuItem<String>>[
+          const DropdownMenuItem(value: '', child: Text('None')),
+          ...courses
+              .map((c) => (c['name'] as String? ?? '').trim())
+              .where((name) => name.isNotEmpty && seenNames.add(name))
+              .map((name) => DropdownMenuItem(value: name, child: Text(name))),
+        ];
+        final validVal =
+            (selectedValue == null || !items.any((i) => i.value == selectedValue))
+                ? ''
+                : selectedValue;
+        return DropdownButtonFormField<String>(
+          initialValue: validVal,
+          decoration: const InputDecoration(
+            labelText: 'Session subject (optional)',
+            prefixIcon: Icon(Icons.book_outlined, size: 18),
+          ),
+          items: items,
+          onChanged: onChanged,
+        );
+      },
     );
   }
 }

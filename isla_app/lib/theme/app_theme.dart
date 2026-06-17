@@ -88,18 +88,18 @@ class AppTheme {
   }
 
   static const List<Color> subjectColors = [
-    Color(0xFF00E3FD),
-    Color(0xFF6BB9FF),
-    Color(0xFF4DD7C8),
-    Color(0xFFFFB561),
-    Color(0xFFFF8A80),
-    Color(0xFF8EE59E),
+    Color(0xFF00C2D4), // cyan
+    Color(0xFF8B5CF6), // purple
+    Color(0xFF10B981), // emerald
+    Color(0xFFF59E0B), // amber
+    Color(0xFFEF4444), // red
+    Color(0xFF3B82F6), // blue
   ];
 
   // Brand accents / helpers
   static Color get primaryAccent => primaryLight;
 
-  static LinearGradient getPrimaryGradient(bool isDark) => LinearGradient(
+  static LinearGradient getPrimaryGradient(bool isDark) => const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [primaryLight, primaryColor],

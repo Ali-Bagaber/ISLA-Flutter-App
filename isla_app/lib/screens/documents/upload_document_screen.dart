@@ -239,7 +239,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                 enabled: !_isSaving,
                 decoration: const InputDecoration(
                   hintText: 'Enter document title',
-                  prefixIcon: const Icon(Icons.title, size: 18),
+                  prefixIcon: Icon(Icons.title, size: 18),
                 ),
               ),
 
@@ -249,13 +249,13 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
               Text('Select Course', style: AppTheme.labelMedium),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: (_courseNames.contains(_selectedSubject) ||
+                initialValue: (_courseNames.contains(_selectedSubject) ||
                         _selectedSubject == null)
                     ? _selectedSubject
                     : null,
                 decoration: const InputDecoration(
                   hintText: 'Choose a course',
-                  prefixIcon: const Icon(Icons.folder_outlined, size: 18),
+                  prefixIcon: Icon(Icons.folder_outlined, size: 18),
                 ),
                 items: [
                   ..._courseNames.map(
@@ -296,7 +296,7 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
                 decoration: const InputDecoration(
                   hintText:
                       'e.g. Chapter 3 covers recursion, trees, and sorting algorithms',
-                  prefixIcon: const Padding(
+                  prefixIcon: Padding(
                     padding: EdgeInsets.only(bottom: 40),
                     child: Icon(Icons.sticky_note_2_outlined, size: 18),
                   ),

@@ -31,7 +31,16 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            // arm64-v8a / armeabi-v7a → real phones; x86_64 → Android emulators.
+            // pdfrx needs a matching libpdfium.so for each ABI (see tool/setup_pdfium_x86_64.ps1).
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    // pdfrx bundles libpdfium.so per ABI; pickFirst avoids any duplicate-merge error.
+    packaging {
+        jniLibs {
+            pickFirsts += listOf("**/libpdfium.so")
         }
     }
 

@@ -63,6 +63,8 @@ dependencies:
   # Utils
   percent_indicator: ^4.2.3
   flip_card: ^0.7.0
+  flutter_timezone: ^3.0.0
+  share_plus: ^10.0.0
 
   # Document text extraction (PDF / PPTX / DOCX)
   syncfusion_flutter_pdf: ^27.1.55

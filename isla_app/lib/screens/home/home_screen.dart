@@ -7,7 +7,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
-import '../../services/document_service.dart';
 import '../../services/gemini_study_service.dart';
 import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
@@ -28,13 +27,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late String _greeting;
-  late String _greetingEmoji;
+  String _greeting = '';
+  String _greetingEmoji = '';
   late Timer _timer;
 
   StreamSubscription<List<Map<String, dynamic>>>? _tasksSub;
   StreamSubscription<List<Map<String, dynamic>>>? _sessionsSub;
-  StreamSubscription<List<Map<String, dynamic>>>? _documentsSub;
 
   int _completedTasks = 0;
   int _totalTasks = 0;
@@ -60,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _tasksSub?.cancel();
     _sessionsSub?.cancel();
-    _documentsSub?.cancel();
     _timer.cancel();
     super.dispose();
   }
@@ -68,7 +65,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _initStreams() {
     _tasksSub = TaskService.watchTasks().listen(_onTasks);
     _sessionsSub = GeminiStudyService.watchSessions().listen(_onSessions);
-    _documentsSub = DocumentService.watchDocuments().listen((_) {});
   }
 
   DateTime? _toDateTime(dynamic v) {
@@ -321,17 +317,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _updateGreeting() {
     final h = DateTime.now().hour;
+    final next = h < 12 ? 'Good Morning' : (h < 17 ? 'Good Afternoon' : 'Good Evening');
+    if (next == _greeting) return; // no change — skip rebuild
     setState(() {
-      if (h < 12) {
-        _greeting = 'Good Morning';
-        _greetingEmoji = '☀️';
-      } else if (h < 17) {
-        _greeting = 'Good Afternoon';
-        _greetingEmoji = '👋';
-      } else {
-        _greeting = 'Good Evening';
-        _greetingEmoji = '🌙';
-      }
+      _greeting = next;
+      _greetingEmoji = h < 12 ? '☀️' : (h < 17 ? '👋' : '🌙');
     });
   }
 
@@ -1190,10 +1180,10 @@ class _ArcProgressPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
+      ..shader = const SweepGradient(
         startAngle: start,
         endAngle: start + total,
-        colors: const [IslaColors.primary, IslaColors.tertiary],
+        colors: [IslaColors.primary, IslaColors.tertiary],
       ).createShader(rect);
     canvas.drawArc(rect, start, total * progress.clamp(0, 1), false, progressPaint);
   }

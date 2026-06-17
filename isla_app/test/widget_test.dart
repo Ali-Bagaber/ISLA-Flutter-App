@@ -1,6 +1,7 @@
 /// Smoke test for the IslaLogo widget — renders without crashing and shows the
 /// "ISLA" wordmark. This is a lightweight widget test that doesn't pull in
 /// Firebase / file_picker, so it runs on any platform.
+library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isla_app/widgets/isla_logo.dart';

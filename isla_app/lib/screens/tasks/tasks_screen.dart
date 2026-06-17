@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/nav_controller.dart';
+import '../../services/notification_service.dart';
 import '../../services/task_service.dart';
 import '../../widgets/confetti_overlay.dart';
 import '../../widgets/empty_state.dart';
@@ -27,6 +30,105 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   final Map<String, bool> _demoCompletion = <String, bool>{};
   final Map<String, bool> _sectionCollapsed = {};
+  Timer? _clockTimer;
+
+  // Per-task one-shot timers that fire at the exact due moment.
+  final Map<String, Timer> _dueTimers = {};
+  // Due date each timer was armed for — used to detect edits.
+  final Map<String, DateTime> _armedDueDates = {};
+  // IDs we've already fired an overdue notification for this session.
+  final Set<String> _notifiedOverdueIds = {};
+  StreamSubscription<List<Map<String, dynamic>>>? _taskSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fallback rebuild every 30 s keeps the UI honest.
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    // Watch tasks and arm a precise Dart Timer for each upcoming due date.
+    _taskSub = TaskService.watchTasks().listen(_onTasksSnapshot);
+  }
+
+  void _onTasksSnapshot(List<Map<String, dynamic>> tasks) {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final seenIds = <String>{};
+
+    for (final t in tasks) {
+      final id = ((t['id'] ?? t['taskId'] ?? '') as String);
+      if (id.isEmpty) continue;
+      seenIds.add(id);
+
+      if (t['completed'] == true) {
+        _dueTimers.remove(id)?.cancel();
+        _armedDueDates.remove(id);
+        continue;
+      }
+
+      final dueDate = _toDateTime(t['dueDate']);
+      if (dueDate == null) continue;
+
+      final delay = dueDate.difference(now);
+      if (delay.isNegative) {
+        // Already overdue — cancel any stale timer and clear armed record so
+        // a future reschedule (user edits due date forward) will re-arm.
+        _dueTimers.remove(id)?.cancel();
+        _armedDueDates.remove(id);
+        continue;
+      }
+
+      // Re-arm if no timer exists OR the due date was edited.
+      final armed = _armedDueDates[id];
+      if (armed != null && armed == dueDate) continue; // nothing changed
+
+      _dueTimers.remove(id)?.cancel(); // cancel old timer if date changed
+      _armedDueDates[id] = dueDate;
+      // Also clear the "already notified" flag so the new due time fires.
+      _notifiedOverdueIds.remove(id);
+
+      final title    = (t['title']    ?? 'Task') as String;
+      final subject  = (t['subject']  ?? '')     as String;
+      final priority = (t['priority'] ?? 'Medium') as String;
+
+      _dueTimers[id] = Timer(delay, () {
+        _dueTimers.remove(id);
+        _armedDueDates.remove(id);
+        if (!mounted) return;
+        setState(() {});
+        if (!_notifiedOverdueIds.contains(id)) {
+          _notifiedOverdueIds.add(id);
+          NotificationService.instance.showImmediateOverdue(
+            taskId: id,
+            title: title,
+            subject: subject,
+            priority: priority,
+          );
+        }
+      });
+    }
+
+    // Cancel timers for tasks that were deleted.
+    for (final id in _dueTimers.keys.toList()) {
+      if (!seenIds.contains(id)) {
+        _dueTimers.remove(id)?.cancel();
+        _armedDueDates.remove(id);
+      }
+    }
+
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    for (final t in _dueTimers.values) { t.cancel(); }
+    _dueTimers.clear();
+    _armedDueDates.clear();
+    _taskSub?.cancel();
+    super.dispose();
+  }
 
   final List<_TaskVm> _demoTasks = [
     _TaskVm(
@@ -350,7 +452,9 @@ class _TasksScreenState extends State<TasksScreen> {
     final groups = <_TimeGroup, List<_TaskVm>>{
       for (final g in _TimeGroup.values) g: [],
     };
-    for (final t in tasks) groups[_timeGroupFor(t)]!.add(t);
+    for (final t in tasks) {
+      groups[_timeGroupFor(t)]!.add(t);
+    }
 
     final widgets = <Widget>[];
     for (final group in _TimeGroup.values) {

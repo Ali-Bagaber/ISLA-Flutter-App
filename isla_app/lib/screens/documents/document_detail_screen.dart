@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
@@ -9,7 +11,7 @@ import '../../services/document_service.dart';
 import '../study_aids/summary_screen.dart';
 import '../study_aids/flashcards_screen.dart';
 import '../study_aids/quiz_screen.dart';
-import 'document_annotate_screen.dart';
+import 'pdf_annotation_screen.dart';
 
 class DocumentDetailScreen extends StatelessWidget {
   final Map<String, dynamic> document;
@@ -36,6 +38,44 @@ class DocumentDetailScreen extends StatelessWidget {
     return '${dt.day}/${dt.month}/${dt.year}';
   }
 
+  /// Share the annotated PDF if one has been saved, otherwise share the
+  /// original document URL so the recipient can open it directly.
+  Future<void> _shareDocument(BuildContext context) async {
+    final title = document['title'] as String? ?? 'Document';
+
+    // 1. Try the saved annotated PDF first.
+    final annotatedPath = document['annotatedFilePath'] as String?;
+    if (annotatedPath != null && annotatedPath.isNotEmpty) {
+      final f = File(annotatedPath);
+      if (await f.exists()) {
+        await Share.shareXFiles(
+          [XFile(annotatedPath, mimeType: 'application/pdf', name: '$title (annotated).pdf')],
+          subject: title,
+          text: 'Annotated document from ISLA',
+        );
+        return;
+      }
+    }
+
+    // 2. Fall back to the original download URL.
+    final url = ((document['fileUrl'] ?? document['downloadUrl']) as String?) ?? '';
+    if (url.isNotEmpty) {
+      await Share.share(url, subject: title);
+      return;
+    }
+
+    // 3. Nothing to share yet.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No annotated file yet. Open "Annotate / Draw", draw, then Save — then share.',
+          ),
+        ),
+      );
+    }
+  }
+
   IconData _docIcon() {
     final type = (document['type'] as String? ?? '').toUpperCase();
     if (type == 'PDF') return Icons.picture_as_pdf_rounded;
@@ -56,15 +96,8 @@ class DocumentDetailScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share_rounded, size: 18),
-            onPressed: () {
-              final url = ((document['fileUrl'] ?? document['downloadUrl']) as String?) ?? '';
-              if (url.isNotEmpty) {
-                Clipboard.setData(ClipboardData(text: url));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Document link copied to clipboard')),
-                );
-              }
-            },
+            tooltip: 'Share annotated PDF',
+            onPressed: () => _shareDocument(context),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 18),
@@ -186,13 +219,15 @@ class DocumentDetailScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => DocumentAnnotateScreen(
+                          builder: (_) => PdfAnnotationScreen(
                             documentTitle:
                                 document['title'] as String? ?? 'Document',
                             documentId: (document['id'] ??
                                 document['documentId']) as String?,
                             downloadUrl: (document['fileUrl'] ??
                                 document['downloadUrl']) as String?,
+                            storagePath: document['storagePath'] as String?,
+                            fileName: document['fileName'] as String?,
                             fileType: document['type'] as String? ?? 'PDF',
                           ),
                         ),
@@ -371,8 +406,12 @@ class _StudyAidCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Provider.of<ThemeProvider>(context).isDarkMode;
+    final cardColor = AppTheme.getCardColor(isDark);
+    final textColor = isDark ? Colors.white : AppTheme.textPrimary;
+
     return Material(
-      color: Colors.white,
+      color: cardColor,
       borderRadius: AppTheme.borderRadiusMedium,
       child: InkWell(
         onTap: onTap,
@@ -381,7 +420,7 @@ class _StudyAidCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: AppTheme.borderRadiusMedium,
-            border: Border.all(color: color.withOpacity(0.2)),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
@@ -389,7 +428,7 @@ class _StudyAidCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: isDark ? 0.18 : 0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -399,7 +438,10 @@ class _StudyAidCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AppTheme.labelMedium),
+                    Text(
+                      title,
+                      style: AppTheme.labelMedium.copyWith(color: textColor),
+                    ),
                     const SizedBox(height: 4),
                     Text(description, style: AppTheme.bodySmall),
                   ],

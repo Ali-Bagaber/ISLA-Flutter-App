@@ -50,18 +50,20 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
           // Full-screen background image
-          Image.asset(
-            'assets/images/splash_background.png',
-            width: size.width,
-            height: size.height,
-            fit: BoxFit.cover,
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/splash_background.png',
+              fit: BoxFit.cover,
+              // Shift the crop window toward the bottom so the lighthouse /
+              // island ring lands near the vertical centre of the screen.
+              alignment: const Alignment(0, 0.35),
+            ),
           ),
           // Dark overlay so text stays legible
           Container(

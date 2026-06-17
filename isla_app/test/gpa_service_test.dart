@@ -1,6 +1,7 @@
 /// Unit tests for the GPA / CGPA math in GpaService.
 ///
 /// Pure-function tests — no Firebase, no Flutter widgets, runs anywhere.
+library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isla_app/services/gpa_service.dart';
 

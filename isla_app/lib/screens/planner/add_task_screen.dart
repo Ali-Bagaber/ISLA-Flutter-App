@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/task_service.dart';
 import '../../services/document_service.dart';
+import '../../services/notification_service.dart';
 
 class AddTaskScreen extends StatefulWidget {
   final String? taskId;
@@ -142,14 +143,34 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.taskId != null
-              ? 'Task updated successfully!'
-              : 'Task added successfully!'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
+      // If a reminder was requested but notifications are off, the alarm will
+      // never surface — tell the user and offer to enable it.
+      final notif = NotificationService.instance;
+      final wantsFutureAlarm = dueDateTime.isAfter(DateTime.now());
+      if (wantsFutureAlarm && !notif.notificationsEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Task saved, but notifications are OFF — you won\'t get a reminder.'),
+            backgroundColor: const Color(0xFFFF9F0A),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Enable',
+              textColor: Colors.black,
+              onPressed: () => notif.requestNotificationPermission(),
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.taskId != null
+                ? 'Task updated successfully!'
+                : 'Task added successfully!'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
@@ -262,7 +283,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   controller: _titleController,
                   decoration: const InputDecoration(
                     hintText: 'Enter task title',
-                    prefixIcon: const Icon(Icons.title, size: 18),
+                    prefixIcon: Icon(Icons.title, size: 18),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -295,7 +316,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                       }),
                     ];
                     return DropdownButtonFormField<String>(
-                      value: items.any((i) => i.value == _selectedSubject)
+                      initialValue: items.any((i) => i.value == _selectedSubject)
                           ? _selectedSubject
                           : '',
                       decoration: const InputDecoration(
@@ -315,7 +336,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _selectedType,
                   decoration: const InputDecoration(
-                    prefixIcon: const Icon(Icons.folder_outlined, size: 18),
+                    prefixIcon: Icon(Icons.folder_outlined, size: 18),
                   ),
                   items: _taskTypes.map((type) {
                     return DropdownMenuItem(value: type, child: Text(type));

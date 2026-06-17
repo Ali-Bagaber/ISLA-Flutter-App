@@ -465,17 +465,22 @@ class DatabaseSchemaService {
                 ));
 
       final sourceUpdates = <String, dynamic>{};
-      if (_toText(data['sessionId']).isEmpty)
+      if (_toText(data['sessionId']).isEmpty) {
         sourceUpdates['sessionId'] = doc.id;
-      if (timestamp != null && data['date'] == null)
+      }
+      if (timestamp != null && data['date'] == null) {
         sourceUpdates['date'] = timestamp;
+      }
       if (data['duration'] == null) sourceUpdates['duration'] = focusMinutes;
-      if (data['actualMinutes'] == null)
+      if (data['actualMinutes'] == null) {
         sourceUpdates['actualMinutes'] = focusMinutes;
-      if (data['plannedMinutes'] == null)
+      }
+      if (data['plannedMinutes'] == null) {
         sourceUpdates['plannedMinutes'] = focusMinutes;
-      if (_toText(data['sessionMode']).isEmpty)
+      }
+      if (_toText(data['sessionMode']).isEmpty) {
         sourceUpdates['sessionMode'] = 'focus';
+      }
       if (data['focusScore'] == null) sourceUpdates['focusScore'] = score;
       if (startTime != null && data['startTime'] == null) {
         sourceUpdates['startTime'] = startTime;
@@ -554,8 +559,9 @@ class DatabaseSchemaService {
       final type = _toText(data['type'], fallback: 'Summary');
 
       final sourceUpdates = <String, dynamic>{};
-      if (_toText(data['studyAidId']).isEmpty)
+      if (_toText(data['studyAidId']).isEmpty) {
         sourceUpdates['studyAidId'] = doc.id;
+      }
       if (data['generatedDate'] == null) {
         sourceUpdates['generatedDate'] = generatedDate;
       }
@@ -647,19 +653,24 @@ class DatabaseSchemaService {
       final sourceUpdates = <String, dynamic>{
         'resultId': doc.id,
       };
-      if (data['totalQuestions'] == null)
+      if (data['totalQuestions'] == null) {
         sourceUpdates['totalQuestions'] = total;
-      if (data['correctAnswers'] == null)
+      }
+      if (data['correctAnswers'] == null) {
         sourceUpdates['correctAnswers'] = boundedCorrect;
+      }
       if (data['wrongAnswers'] == null) sourceUpdates['wrongAnswers'] = wrong;
       if (data['unansweredCount'] == null) sourceUpdates['unansweredCount'] = 0;
-      if (data['scorePercentage'] == null)
+      if (data['scorePercentage'] == null) {
         sourceUpdates['scorePercentage'] = percentage;
-      if (data['attemptDate'] == null)
+      }
+      if (data['attemptDate'] == null) {
         sourceUpdates['attemptDate'] = attemptDate;
-      if (data['timeSpentSeconds'] == null)
+      }
+      if (data['timeSpentSeconds'] == null) {
         sourceUpdates['timeSpentSeconds'] =
             _toInt(data['timeSpent'], fallback: total * 45);
+      }
       if (data['attemptNo'] == null) sourceUpdates['attemptNo'] = 1;
 
       await queueUpdate(doc.reference, sourceUpdates);

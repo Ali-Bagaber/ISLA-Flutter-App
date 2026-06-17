@@ -78,8 +78,8 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const IslaLogo(),
-        actions: [
-          const Padding(
+        actions: const [
+          Padding(
             padding: EdgeInsets.only(right: 12),
             child: Center(child: IslaProfileAvatar()),
           ),

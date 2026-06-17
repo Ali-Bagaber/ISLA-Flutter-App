@@ -38,24 +38,14 @@ class GeminiStudyService {
     void Function()? onRetrying,
     int maxTokens = 1024,
   }) async {
-    // ── 1. Gemini ────────────────────────────────────────────────────────────
     if (AppConfig.hasGeminiKey) {
       try {
         return await _callGemini(prompt, maxTokens: maxTokens);
-      } on DioException catch (e) {
-        final code = e.response?.statusCode;
-        // Auth errors → key is broken, don't try further providers
-        if (code == 401 || code == 403) {
-          throw StateError('Gemini API key invalid or restricted.');
-        }
-        // 429, network, or anything else → notify UI and try Groq
-        onRetrying?.call();
-      } on StateError {
-        onRetrying?.call();
-      }
+      } catch (_) {}
     }
 
-    // ── 2. Groq ──────────────────────────────────────────────────────────────
+    onRetrying?.call();
+
     if (AppConfig.hasGroqKey) {
       try {
         return await _callOpenAiCompatible(
@@ -65,12 +55,9 @@ class GeminiStudyService {
           prompt: prompt,
           maxTokens: maxTokens,
         );
-      } catch (_) {
-        // Fall through to OpenRouter
-      }
+      } catch (_) {}
     }
 
-    // ── 3. OpenRouter ────────────────────────────────────────────────────────
     if (AppConfig.hasOpenRouterKey) {
       try {
         return await _callOpenAiCompatible(
@@ -79,11 +66,9 @@ class GeminiStudyService {
           apiKey: AppConfig.openRouterApiKey,
           prompt: prompt,
           maxTokens: maxTokens,
-          extraHeaders: {'HTTP-Referer': 'https://isla.app'},
+          extraHeaders: {'HTTP-Referer': 'https://isla-app.dev'},
         );
-      } catch (_) {
-        // Fall through
-      }
+      } catch (_) {}
     }
 
     throw StateError(
@@ -515,7 +500,7 @@ class GeminiStudyService {
     final userId = _userId;
     if (db == null || userId == null) return Stream.value([]);
 
-    Stream<List<Map<String, dynamic>>> _snap(String col) => db
+    Stream<List<Map<String, dynamic>>> snap(String col) => db
         .collection(col)
         .where('userId', isEqualTo: userId)
         .snapshots()
@@ -523,9 +508,9 @@ class GeminiStudyService {
 
     // Combine three streams by merging their latest values
     return _combineThree(
-      _snap('summaries'),
-      _snap('flashcards'),
-      _snap('quiz_aids'),
+      snap('summaries'),
+      snap('flashcards'),
+      snap('quiz_aids'),
     );
   }
 

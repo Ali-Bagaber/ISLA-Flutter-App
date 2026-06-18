@@ -1255,7 +1255,7 @@ class _FocusDonutChart extends StatelessWidget {
       return PieChartSectionData(
         value: e.value.toDouble(),
         color: color,
-        radius: 52, // thick ring: 52 radius - 32 centerSpace = 20px ring
+        radius: 42, // ring thickness: 42 outer radius - 28 centerSpace
         title: '',
         badgeWidget: null,
       );
@@ -1345,15 +1345,15 @@ class _FocusDonutChart extends StatelessWidget {
               children: [
                 // Donut
                 SizedBox(
-                  height: 140,
-                  width: 140,
+                  height: 116,
+                  width: 116,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       PieChart(
                         PieChartData(
                           sections: sections,
-                          centerSpaceRadius: 34,
+                          centerSpaceRadius: 28,
                           sectionsSpace: 2.5,
                           startDegreeOffset: -90,
                         ),
@@ -1367,7 +1367,7 @@ class _FocusDonutChart extends StatelessWidget {
                                 : '$total',
                             style: GoogleFonts.manrope(
                               color: onSurface,
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.8,
                             ),

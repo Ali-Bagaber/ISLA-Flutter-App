@@ -1152,7 +1152,7 @@ class _TimerScreenState extends State<TimerScreen>
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: _flowStep == _SessionFlowStep.list
           ? Padding(
-              padding: const EdgeInsets.only(bottom: 74),
+              padding: const EdgeInsets.only(bottom: 12),
               child: _buildNewSessionFloatingButton(isDark),
             )
           : null,
@@ -3802,10 +3802,12 @@ class _TimerScreenState extends State<TimerScreen>
                         child: CircularProgressIndicator(strokeWidth: 2.4),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        'Analyzing and generating checklist...',
-                        style: AppTheme.labelMedium.copyWith(
-                          color: AppTheme.getTextPrimary(isDark),
+                      Expanded(
+                        child: Text(
+                          'Analyzing and generating checklist...',
+                          style: AppTheme.labelMedium.copyWith(
+                            color: AppTheme.getTextPrimary(isDark),
+                          ),
                         ),
                       ),
                     ],
@@ -4123,14 +4125,6 @@ class _TimerScreenState extends State<TimerScreen>
                             ? 'Included in flow'
                             : 'Excluded from flow',
                       ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(
-                        Icons.drag_handle_rounded,
-                        size: 18,
-                        color: AppTheme.getTextSecondary(isDark),
-                      ),
-                    ),
                     IconButton(
                       onPressed: () {
                         setState(() {

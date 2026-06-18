@@ -535,11 +535,12 @@ class _CourseRowState extends State<_CourseRow> {
           ),
           const SizedBox(width: 4),
           SizedBox(
-            width: 58,
+            width: 64,
             child: DropdownButtonFormField<int>(
               initialValue: credits,
               isDense: true,
               isExpanded: true,
+              iconSize: 18,
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(horizontal: 2),
@@ -556,11 +557,12 @@ class _CourseRowState extends State<_CourseRow> {
           ),
           const SizedBox(width: 4),
           SizedBox(
-            width: 56,
+            width: 64,
             child: DropdownButtonFormField<String>(
               initialValue: GpaService.grades.contains(grade) ? grade : 'B',
               isDense: true,
               isExpanded: true,
+              iconSize: 18,
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(horizontal: 2),

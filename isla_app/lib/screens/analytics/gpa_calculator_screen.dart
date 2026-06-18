@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../services/gpa_service.dart';
 import '../../theme/app_theme.dart';
@@ -17,11 +19,22 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
   List<Map<String, dynamic>> _semesters = [];
   bool _loading = true;
   bool _saving = false;
+  Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    // Flush any pending debounced save before leaving the screen.
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      _save();
+    }
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -52,8 +65,12 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
     });
   }
 
+  // Monotonic counter guarantees unique ids even when several rows are created
+  // in the same microsecond (which would otherwise produce duplicate ValueKeys
+  // and scramble row state).
+  static int _idSeq = 0;
   String _genId(String prefix) =>
-      '${prefix}_${DateTime.now().microsecondsSinceEpoch}';
+      '${prefix}_${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
 
   Future<void> _save() async {
     if (_saving) return;
@@ -63,6 +80,13 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Debounced save — used for high-frequency edits (typing a course name,
+  /// nudging a dropdown) so we don't hit Firestore on every keystroke.
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600), _save);
   }
 
   void _addSemester() {
@@ -103,7 +127,7 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
       final courses = _semesters[semIndex]['courses'] as List;
       courses[courseIndex] = {...courses[courseIndex], ...patch};
     });
-    _save();
+    _scheduleSave();
   }
 
   void _removeCourse(int semIndex, int courseIndex) {
@@ -309,8 +333,11 @@ class _SemesterCardState extends State<_SemesterCard> {
   @override
   void didUpdateWidget(covariant _SemesterCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final newName = widget.semester['name'] as String? ?? '';
-    if (newName != _nameCtrl.text) _nameCtrl.text = newName;
+    // Only resync the field when a *different* semester occupies this slot,
+    // never on a routine rebuild — otherwise in-progress typing is clobbered.
+    if (oldWidget.semester['id'] != widget.semester['id']) {
+      _nameCtrl.text = widget.semester['name'] as String? ?? '';
+    }
   }
 
   @override
@@ -463,8 +490,13 @@ class _CourseRowState extends State<_CourseRow> {
   @override
   void didUpdateWidget(covariant _CourseRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final newName = widget.course['name'] as String? ?? '';
-    if (newName != _nameCtrl.text) _nameCtrl.text = newName;
+    // Only resync when a *different* course occupies this row (e.g. a delete
+    // shifts the list up). Resyncing on every rebuild — as before — wiped the
+    // name the user had just typed whenever the parent rebuilt (e.g. on
+    // "Add Course"), because the model briefly lagged the live text field.
+    if (oldWidget.course['id'] != widget.course['id']) {
+      _nameCtrl.text = widget.course['name'] as String? ?? '';
+    }
   }
 
   @override
@@ -479,11 +511,10 @@ class _CourseRowState extends State<_CourseRow> {
     final grade = (widget.course['grade'] ?? 'B').toString();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
       child: Row(
         children: [
           Expanded(
-            flex: 4,
             child: TextField(
               controller: _nameCtrl,
               onChanged: (v) => widget.onChange({'name': v}),
@@ -497,15 +528,16 @@ class _CourseRowState extends State<_CourseRow> {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           SizedBox(
-            width: 70,
+            width: 58,
             child: DropdownButtonFormField<int>(
               initialValue: credits,
               isDense: true,
+              isExpanded: true,
               decoration: const InputDecoration(
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                contentPadding: EdgeInsets.symmetric(horizontal: 2),
               ),
               items: const [1, 2, 3, 4, 5, 6]
                   .map((c) => DropdownMenuItem(
@@ -517,15 +549,16 @@ class _CourseRowState extends State<_CourseRow> {
               onChanged: (v) => widget.onChange({'credits': v ?? 3}),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           SizedBox(
-            width: 70,
+            width: 56,
             child: DropdownButtonFormField<String>(
               initialValue: GpaService.grades.contains(grade) ? grade : 'B',
               isDense: true,
+              isExpanded: true,
               decoration: const InputDecoration(
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                contentPadding: EdgeInsets.symmetric(horizontal: 2),
               ),
               items: GpaService.grades
                   .map((g) => DropdownMenuItem(
@@ -540,6 +573,9 @@ class _CourseRowState extends State<_CourseRow> {
             onPressed: widget.onRemove,
             icon: const Icon(Icons.close_rounded, size: 16),
             color: widget.textSecondary,
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             tooltip: 'Remove course',
           ),
         ],

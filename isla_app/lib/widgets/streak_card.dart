@@ -196,7 +196,7 @@ class _StreakCardState extends State<StreakCard>
         Text(
           active ? _motivation(widget.streak) : 'Study today to start a streak 🔥',
           style: GoogleFonts.inter(color: onMuted, fontSize: 11.5, height: 1.3),
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
       ],
@@ -281,7 +281,7 @@ class _StreakCardState extends State<StreakCard>
     if (streak >= 14) return 'Two weeks strong — real habit forming.';
     if (streak >= 7) return 'A whole week! Keep the fire alive.';
     if (streak >= 3) return 'Nice momentum — don\'t break the chain!';
-    return 'Great start — come back tomorrow!';
+    return 'You\'re on a roll — keep it going.';
   }
 }
 

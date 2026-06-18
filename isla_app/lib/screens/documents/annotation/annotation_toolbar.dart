@@ -117,7 +117,7 @@ class AnnotationTopToolbar extends StatelessWidget {
               ),
               if (enabled) ...[
                 _ModeToggle(drawMode: drawMode, onChanged: onModeChanged),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 _BarIconButton(
                   icon: Icons.undo_rounded,
                   tooltip: 'Undo',
@@ -136,9 +136,9 @@ class AnnotationTopToolbar extends StatelessWidget {
                   enabled: canClear,
                   onTap: onClearPage,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.only(left: 4, right: 8),
                   child: _SaveButton(saving: saving, onTap: onSave),
                 ),
               ] else if (onRetry != null)
@@ -203,7 +203,7 @@ class _ModeToggle extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? AnnotationStyle.accent : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -214,7 +214,7 @@ class _ModeToggle extends StatelessWidget {
             Icon(icon,
                 size: 15,
                 color: selected ? Colors.black : AnnotationStyle.iconDim),
-            const SizedBox(width: 5),
+            const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
@@ -241,7 +241,7 @@ class _SaveButton extends StatelessWidget {
       onTap: saving ? null : onTap,
       child: Container(
         height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [AnnotationStyle.accent, Color(0xFF00B8D4)],
@@ -303,6 +303,9 @@ class _BarIconButton extends StatelessWidget {
       child: IconButton(
         onPressed: enabled ? onTap : null,
         splashRadius: 20,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         icon: Icon(
           icon,
           size: 20,
@@ -458,7 +461,7 @@ class _ToolChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
           color: selected
               ? AnnotationStyle.accent.withValues(alpha: 0.15)
@@ -476,7 +479,7 @@ class _ToolChip extends StatelessWidget {
                 size: 17,
                 color:
                     selected ? AnnotationStyle.accent : AnnotationStyle.iconDim),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
@@ -516,9 +519,9 @@ class _SizeDots extends StatelessWidget {
               GestureDetector(
                 onTap: () => onChanged(w),
                 child: Container(
-                  width: 34,
-                  height: 34,
-                  margin: const EdgeInsets.only(left: 6),
+                  width: 30,
+                  height: 30,
+                  margin: const EdgeInsets.only(left: 5),
                   decoration: BoxDecoration(
                     color: width == w
                         ? AnnotationStyle.accent.withValues(alpha: 0.15)

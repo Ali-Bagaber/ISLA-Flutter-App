@@ -4078,8 +4078,13 @@ class _TimerScreenState extends State<TimerScreen>
                         onPressed: () => _skipChecklistItem(index),
                         icon: Icon(
                           Icons.skip_next_rounded,
+                          size: 20,
                           color: AppTheme.getTextSecondary(isDark),
                         ),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
                         tooltip: 'Skip this task',
                       ),
                     if (!item.isSkipped)
@@ -4103,18 +4108,24 @@ class _TimerScreenState extends State<TimerScreen>
                           item.isSelected
                               ? Icons.visibility_rounded
                               : Icons.visibility_off_rounded,
+                          size: 20,
                           color: item.isSelected
                               ? AppTheme.primaryColor
                               : AppTheme.getTextSecondary(isDark),
                         ),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
                         tooltip: item.isSelected
                             ? 'Included in flow'
                             : 'Excluded from flow',
                       ),
                     Padding(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Icon(
                         Icons.drag_handle_rounded,
+                        size: 20,
                         color: AppTheme.getTextSecondary(isDark),
                       ),
                     ),
@@ -4133,8 +4144,13 @@ class _TimerScreenState extends State<TimerScreen>
                       },
                       icon: const Icon(
                         Icons.delete_outline_rounded,
+                        size: 20,
                         color: AppTheme.error,
                       ),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
                   ],
                 ),

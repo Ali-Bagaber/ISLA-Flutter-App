@@ -564,8 +564,9 @@ class AnalyticsScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 18),
                                         if (subjectMap.isNotEmpty) ...[
-                                          _SectionLabel(label: 'Focus Distribution', isDark: isDark),
-                                          const SizedBox(height: 10),
+                                          // Chart card is self-titled, so no
+                                          // outer section label (avoids the
+                                          // duplicate "Focus Distribution").
                                           _FocusDonutChart(subjectMap: subjectMap, isDark: isDark),
                                           const SizedBox(height: 18),
                                         ],

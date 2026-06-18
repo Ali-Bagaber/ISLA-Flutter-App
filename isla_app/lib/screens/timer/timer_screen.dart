@@ -2065,7 +2065,9 @@ class _TimerScreenState extends State<TimerScreen>
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 10),
-        child: IslaPremiumCard(
+        child: GestureDetector(
+          onTap: () => _showSessionDetailsSheet(session),
+          child: IslaPremiumCard(
           padding: const EdgeInsets.all(14),
           borderRadius: 20,
           child: Row(
@@ -2155,9 +2157,161 @@ class _TimerScreenState extends State<TimerScreen>
               ),
             ],
           ),
+          ),
         ),
       ),
     );
+  }
+
+  void _showSessionDetailsSheet(Map<String, dynamic> session) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rawSubject =
+        _normalizeSubjectLabel((session['subject'] ?? '').toString().trim());
+    final subject = rawSubject == 'Other Tasks' ? 'Focus Session' : rawSubject;
+    final focusMinutes = _toInt(session['focusMinutes']);
+    final timestamp = _toDateTime(session['timestamp']);
+    final score = _sessionFocusScore(session);
+    final cycles = _toInt(session['cycles']);
+    final cDone = _toInt(session['checklistDone']);
+    final cTotal = _toInt(session['checklistTotal']);
+    final vCorrect = _toInt(session['verifiedCorrect']);
+    final vTotal = _toInt(session['verifiedTotal']);
+    final id = (session['id'] ?? session['sessionId'] ?? '').toString();
+
+    final textPrimary = AppTheme.getTextPrimary(isDark);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+
+    Widget row(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: AppTheme.primaryColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(label,
+                    style: AppTheme.bodySmall
+                        .copyWith(color: textSecondary, fontSize: 13)),
+              ),
+              Text(value,
+                  style: AppTheme.bodySmall.copyWith(
+                      color: textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+        );
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(_sessionIcon(subject), color: AppTheme.primaryColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.headingSmall.copyWith(
+                            color: textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('Score $score',
+                        style: AppTheme.bodySmall.copyWith(
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(_formatSessionRange(timestamp, focusMinutes),
+                  style: AppTheme.bodySmall
+                      .copyWith(color: textSecondary, fontSize: 12)),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              row(Icons.schedule_rounded, 'Focus time',
+                  _formatDurationMinutes(focusMinutes)),
+              row(Icons.repeat_rounded, 'Cycles completed', '$cycles'),
+              if (cTotal > 0)
+                row(Icons.checklist_rounded, 'Checklist', '$cDone / $cTotal'),
+              if (vTotal > 0)
+                row(Icons.quiz_rounded, 'Quick Check', '$vCorrect / $vTotal'),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _deleteSession(id);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete session'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.error,
+                    side: BorderSide(
+                        color: AppTheme.error.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteSession(String id) async {
+    if (id.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete session?'),
+        content: const Text(
+            'This removes the session and rolls back its study time from your '
+            'totals. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await GeminiStudyService.deleteSession(id);
+      messenger.showSnackBar(const SnackBar(content: Text('Session deleted')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
   }
 
   Widget _buildSessionListStep(bool isDark) {

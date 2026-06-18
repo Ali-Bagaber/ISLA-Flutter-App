@@ -4027,7 +4027,9 @@ class _TimerScreenState extends State<TimerScreen>
               ),
               child: ListTile(
                 onTap: () => _markChecklistItemGuided(index),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                contentPadding: const EdgeInsets.only(left: 10, right: 2),
+                horizontalTitleGap: 8,
+                minLeadingWidth: 0,
                 leading: GestureDetector(
                   onTap: () => _markChecklistItemGuided(index),
                   child: _ChecklistStatusBadge(
@@ -4122,10 +4124,10 @@ class _TimerScreenState extends State<TimerScreen>
                             : 'Excluded from flow',
                       ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: Icon(
                         Icons.drag_handle_rounded,
-                        size: 20,
+                        size: 18,
                         color: AppTheme.getTextSecondary(isDark),
                       ),
                     ),

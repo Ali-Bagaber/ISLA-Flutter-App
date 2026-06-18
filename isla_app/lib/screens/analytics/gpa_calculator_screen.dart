@@ -124,8 +124,13 @@ class _GPACalculatorScreenState extends State<GPACalculatorScreen> {
 
   void _updateCourse(int semIndex, int courseIndex, Map<String, dynamic> patch) {
     setState(() {
-      final courses = _semesters[semIndex]['courses'] as List;
-      courses[courseIndex] = {...courses[courseIndex], ...patch};
+      final courses =
+          (_semesters[semIndex]['courses'] as List).cast<Map<String, dynamic>>();
+      // Explicit <String, dynamic> is essential: an untyped {...spread} infers
+      // Map<dynamic, dynamic>, which throws when written back into the
+      // List<Map<String, dynamic>> — silently dropping every grade/credit/name
+      // edit and freezing the GPA at the default 3.00.
+      courses[courseIndex] = <String, dynamic>{...courses[courseIndex], ...patch};
     });
     _scheduleSave();
   }

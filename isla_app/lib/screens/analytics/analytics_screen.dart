@@ -1560,7 +1560,7 @@ class _DonutPainter extends CustomPainter {
 
     final n = values.length;
     // Gap between segments (radians). Single segment = full ring, no gap.
-    final gap = n > 1 ? 0.20 : 0.0;
+    final gap = n > 1 ? 0.28 : 0.0;
     final available = (2 * math.pi) - (gap * n);
     var start = -math.pi / 2 + (n > 1 ? gap / 2 : 0);
 

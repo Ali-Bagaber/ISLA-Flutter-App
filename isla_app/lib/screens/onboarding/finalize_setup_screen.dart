@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/theme/app_colors.dart';
+import '../../theme/app_colors.dart';
 import '../../services/user_settings_service.dart';
 import '../../widgets/cyan_gradient_button.dart';
 import '../../widgets/isla_scaffold_background.dart';

@@ -46,3 +46,4 @@ app.*.map.json
 
 # API Keys - DO NOT COMMIT
 lib/config/secrets.dart
+build_web.zip

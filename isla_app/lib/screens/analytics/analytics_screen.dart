@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../core/theme/app_colors.dart';
+import '../../theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/gpa_service.dart';
 import '../../services/user_settings_service.dart';

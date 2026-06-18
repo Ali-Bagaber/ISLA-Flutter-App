@@ -16,7 +16,7 @@ import 'screens/onboarding/finalize_setup_screen.dart';
 import 'screens/onboarding/select_intention_screen.dart';
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/value_proposition_screen.dart';
-import 'core/theme/app_theme.dart';
+import 'theme/isla_theme.dart';
 import 'theme/theme_provider.dart';
 
 Future<void> main() async {

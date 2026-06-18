@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../core/theme/app_colors.dart';
+import '../../theme/app_colors.dart';
 import '../../services/gemini_study_service.dart';
 import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';

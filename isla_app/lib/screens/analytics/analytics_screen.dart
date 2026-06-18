@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -1245,18 +1247,11 @@ class _FocusDonutChart extends StatelessWidget {
     if (total == 0) return const SizedBox();
     final totalHours = total / 60.0;
 
-    final sections = top.asMap().entries.map((entry) {
-      final i = entry.key;
-      final e = entry.value;
-      final color = AppTheme.subjectColors[i % AppTheme.subjectColors.length];
-      return PieChartSectionData(
-        value: e.value.toDouble(),
-        color: color,
-        radius: 42, // ring thickness: 42 outer radius - 28 centerSpace
-        title: '',
-        badgeWidget: null,
-      );
-    }).toList();
+    final values = top.map((e) => e.value.toDouble()).toList();
+    final colors = [
+      for (var i = 0; i < top.length; i++)
+        AppTheme.subjectColors[i % AppTheme.subjectColors.length],
+    ];
 
     return Container(
       decoration: BoxDecoration(
@@ -1342,17 +1337,17 @@ class _FocusDonutChart extends StatelessWidget {
               children: [
                 // Donut
                 SizedBox(
-                  height: 116,
-                  width: 116,
+                  height: 122,
+                  width: 122,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      PieChart(
-                        PieChartData(
-                          sections: sections,
-                          centerSpaceRadius: 28,
-                          sectionsSpace: 2.5,
-                          startDegreeOffset: -90,
+                      CustomPaint(
+                        size: const Size(122, 122),
+                        painter: _DonutPainter(
+                          values: values,
+                          colors: colors,
+                          isDark: isDark,
                         ),
                       ),
                       Column(
@@ -1514,6 +1509,93 @@ class _FocusDonutChart extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Premium donut: rounded, gapped gradient segments over a faint track, with a
+/// soft glow behind the largest slice. Pure CustomPainter for full control.
+class _DonutPainter extends CustomPainter {
+  final List<double> values;
+  final List<Color> colors;
+  final bool isDark;
+
+  _DonutPainter({
+    required this.values,
+    required this.colors,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = values.fold<double>(0, (a, b) => a + b);
+    if (total <= 0) return;
+
+    const stroke = 16.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (math.min(size.width, size.height) - stroke) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    // Faint background track.
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = (isDark ? Colors.white : Colors.black)
+            .withValues(alpha: isDark ? 0.06 : 0.05),
+    );
+
+    // Soft glow behind the segments for a premium feel.
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = colors.isNotEmpty
+            ? colors.first.withValues(alpha: isDark ? 0.18 : 0.12)
+            : Colors.transparent
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+
+    final n = values.length;
+    // Gap between segments (radians). Single segment = full ring, no gap.
+    final gap = n > 1 ? 0.20 : 0.0;
+    final available = (2 * math.pi) - (gap * n);
+    var start = -math.pi / 2 + (n > 1 ? gap / 2 : 0);
+
+    for (var i = 0; i < n; i++) {
+      final sweep = (values[i] / total) * available;
+      if (sweep <= 0) continue;
+      final color = colors[i % colors.length];
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          startAngle: 0,
+          endAngle: sweep,
+          colors: [
+            HSLColor.fromColor(color).withLightness(
+              (HSLColor.fromColor(color).lightness + 0.12).clamp(0.0, 1.0),
+            ).toColor(),
+            color,
+          ],
+          transform: GradientRotation(start),
+        ).createShader(rect);
+      // Inset by half the cap so the rounded ends stay inside the segment.
+      final capInset = (stroke / 2) / radius;
+      final drawSweep = sweep - capInset;
+      if (drawSweep > 0) {
+        canvas.drawArc(rect, start + capInset / 2, drawSweep, false, paint);
+      }
+      start += sweep + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DonutPainter old) =>
+      old.values != values || old.colors != colors || old.isDark != isDark;
 }
 
 class _AiStatsRow extends StatelessWidget {

@@ -572,6 +572,44 @@ class GeminiStudyService {
             (snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 
+  /// Delete a focus session and roll back its contribution to analytics totals.
+  /// Removes the doc from both `sessions` and `study_sessions`, then decrements
+  /// the user's total study minutes and session count (clamped at 0).
+  static Future<void> deleteSession(String sessionId) async {
+    final db = _db;
+    final userId = _userId;
+    if (db == null || userId == null || sessionId.isEmpty) return;
+
+    // Read the session's minutes first so we can subtract them from analytics.
+    var minutes = 0;
+    try {
+      final snap = await db.collection('sessions').doc(sessionId).get();
+      minutes = (snap.data()?['focusMinutes'] as num? ?? 0).toInt();
+    } catch (_) {}
+
+    await db.collection('sessions').doc(sessionId).delete();
+    try {
+      await db.collection('study_sessions').doc(sessionId).delete();
+    } catch (_) {}
+
+    // Roll back the running totals (never below zero).
+    try {
+      final ref = db.collection('analytics').doc(userId);
+      final snap = await ref.get();
+      final data = snap.data() ?? <String, dynamic>{};
+      final totalMinutes =
+          ((data['totalStudyTime'] as num? ?? 0).toInt() - minutes)
+              .clamp(0, 1 << 31);
+      final sessionCount =
+          ((data['sessionCount'] as num? ?? 0).toInt() - 1).clamp(0, 1 << 31);
+      await ref.set({
+        'totalStudyTime': totalMinutes,
+        'sessionCount': sessionCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
   /// Stream for saved Pomodoro sessions
   static Stream<List<Map<String, dynamic>>> watchSessions() {
     final db = _db;

@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/gemini_study_service.dart';
 import '../../services/gpa_service.dart';
 import '../../services/user_settings_service.dart';
 import '../../services/nav_controller.dart';
@@ -670,6 +671,8 @@ class AnalyticsScreen extends StatelessWidget {
                                             );
                                           },
                                         ),
+                                        // ── Recent focus sessions ──────────────────
+                                        const _RecentSessionsSection(),
                                         // ── Marks section ──────────────────────────
                                         const _MarksSection(),
                                       ],
@@ -2546,5 +2549,338 @@ class _CgpaCard extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+// ─── Recent focus sessions (view details / delete) ──────────────────────────
+
+class _RecentSessionsSection extends StatelessWidget {
+  const _RecentSessionsSection();
+
+  static DateTime? _ts(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
+
+  static String _fmtMinutes(int m) {
+    if (m <= 0) return '0m';
+    final h = m ~/ 60;
+    final r = m % 60;
+    if (h == 0) return '${r}m';
+    if (r == 0) return '${h}h';
+    return '${h}h ${r}m';
+  }
+
+  static String _fmtWhen(DateTime? d) {
+    if (d == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(day).inDays;
+    final hh = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final mm = d.minute.toString().padLeft(2, '0');
+    final ap = d.hour >= 12 ? 'PM' : 'AM';
+    final time = '$hh:$mm $ap';
+    if (diff == 0) return 'Today · $time';
+    if (diff == 1) return 'Yesterday · $time';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[d.month - 1]} ${d.day} · $time';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: GeminiStudyService.watchSessions(),
+      builder: (context, snap) {
+        final sessions = [...(snap.data ?? const <Map<String, dynamic>>[])];
+        if (sessions.isEmpty) return const SizedBox.shrink();
+        sessions.sort((a, b) {
+          final da = _ts(a['timestamp']) ?? _ts(a['createdAt']) ?? DateTime(1970);
+          final db = _ts(b['timestamp']) ?? _ts(b['createdAt']) ?? DateTime(1970);
+          return db.compareTo(da);
+        });
+        final recent = sessions.take(6).toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionLabel(label: 'Recent Sessions', isDark: isDark),
+            const SizedBox(height: 10),
+            ...recent.map((s) => _SessionTile(session: s, isDark: isDark)),
+            const SizedBox(height: 14),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  final Map<String, dynamic> session;
+  final bool isDark;
+  const _SessionTile({required this.session, required this.isDark});
+
+  Color _scoreColor(int s) {
+    if (s >= 80) return AppTheme.success;
+    if (s >= 50) return AppTheme.primaryColor;
+    return AppTheme.warning;
+  }
+
+  int get _minutes => (session['focusMinutes'] as num? ??
+          session['actualMinutes'] as num? ??
+          0)
+      .toInt();
+  int get _score => (session['focusScore'] as num? ?? 0).toInt();
+  String get _subject => (session['subject'] ?? 'Focus session').toString();
+  String get _id =>
+      (session['id'] ?? session['sessionId'] ?? '').toString();
+
+  @override
+  Widget build(BuildContext context) {
+    final textPrimary = AppTheme.getTextPrimary(isDark);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+    final cardBg = AppTheme.getCardColor(isDark);
+    final outline = AppTheme.getSurfaceColor(isDark);
+    final when = _RecentSessionsSection._fmtWhen(
+        _RecentSessionsSection._ts(session['timestamp']) ??
+            _RecentSessionsSection._ts(session['createdAt']));
+    final scoreColor = _scoreColor(_score);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: outline),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showDetails(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            child: Row(
+              children: [
+                // Score badge
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: scoreColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$_score',
+                      style: GoogleFonts.manrope(
+                        color: scoreColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_RecentSessionsSection._fmtMinutes(_minutes)}  ·  $when',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: textSecondary,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _confirmDelete(context),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  color: AppTheme.error,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
+                  tooltip: 'Delete session',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context) {
+    final textPrimary = AppTheme.getTextPrimary(isDark);
+    final textSecondary = AppTheme.getTextSecondary(isDark);
+    final cycles = (session['cycles'] as num? ?? 0).toInt();
+    final cDone = (session['checklistDone'] as num? ?? 0).toInt();
+    final cTotal = (session['checklistTotal'] as num? ?? 0).toInt();
+    final vCorrect = (session['verifiedCorrect'] as num? ?? 0).toInt();
+    final vTotal = (session['verifiedTotal'] as num? ?? 0).toInt();
+    final when = _RecentSessionsSection._fmtWhen(
+        _RecentSessionsSection._ts(session['timestamp']) ??
+            _RecentSessionsSection._ts(session['createdAt']));
+
+    Widget row(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: AppTheme.primaryColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(label,
+                    style: GoogleFonts.inter(
+                        color: textSecondary, fontSize: 13)),
+              ),
+              Text(value,
+                  style: GoogleFonts.inter(
+                      color: textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+        );
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.timer_rounded,
+                      color: AppTheme.primaryColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(_subject,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.manrope(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _scoreColor(_score).withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('Score $_score',
+                        style: GoogleFonts.inter(
+                            color: _scoreColor(_score),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12)),
+                  ),
+                ],
+              ),
+              if (when.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(when,
+                    style: GoogleFonts.inter(
+                        color: textSecondary, fontSize: 12)),
+              ],
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              row(Icons.schedule_rounded, 'Focus time',
+                  _RecentSessionsSection._fmtMinutes(_minutes)),
+              row(Icons.repeat_rounded, 'Cycles completed', '$cycles'),
+              if (cTotal > 0)
+                row(Icons.checklist_rounded, 'Checklist', '$cDone / $cTotal'),
+              if (vTotal > 0)
+                row(Icons.quiz_rounded, 'Quick Check', '$vCorrect / $vTotal'),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _confirmDelete(context);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete session'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.error,
+                    side: BorderSide(
+                        color: AppTheme.error.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    if (_id.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete session?'),
+        content: const Text(
+            'This removes the session and rolls back its study time from your '
+            'totals. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await GeminiStudyService.deleteSession(_id);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Session deleted')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    }
   }
 }

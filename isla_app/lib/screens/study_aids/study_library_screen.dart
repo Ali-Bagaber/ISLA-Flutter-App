@@ -8,6 +8,7 @@ import '../../services/gemini_study_service.dart';
 import '../../services/nav_controller.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
 import '../../widgets/page_entrance.dart';
 import 'quiz_screen.dart';
 
@@ -78,8 +79,15 @@ class _StudyLibraryScreenState extends State<StudyLibraryScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         title: const IslaLogo(),
-        actions: const [
-          Padding(
+        actions: [
+          IconButton(
+            onPressed: () => showIslaNotificationsInbox(context),
+            icon: Icon(Icons.notifications_outlined,
+                color: AppTheme.getTextSecondary(isDark), size: 22),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+          const Padding(
             padding: EdgeInsets.only(right: 12),
             child: Center(child: IslaProfileAvatar()),
           ),

@@ -46,6 +46,7 @@ class _TimerScreenState extends State<TimerScreen>
   int _currentSeconds = 25 * 60;
   int _phaseTotalSeconds = 25 * 60;
   int _completedSessions = 0;
+  int _focusElapsedSeconds = 0;
   int _plannedCycles = 1;
   // Whether this session had a Quick Check quiz (a doc was linked). When false,
   // the verification slice is auto-granted and hidden from the breakdown.
@@ -128,23 +129,12 @@ class _TimerScreenState extends State<TimerScreen>
   Future<void> _loadFocusPrefs() async {
     try {
       final s = await UserSettingsService.loadSettings();
-      final f = (s['focus'] as Map?)?.cast<String, dynamic>() ?? {};
       final n = (s['notifications'] as Map?)?.cast<String, dynamic>() ?? {};
-      final work   = (f['workMinutes']  as num?)?.toInt() ?? 25;
-      final brk    = (f['breakMinutes'] as num?)?.toInt() ?? 5;
-      final cycles = (f['cycles']       as num?)?.toInt() ?? 4;
       if (!mounted) return;
       setState(() {
-        _workDurationMinutes  = work;
-        _breakDurationMinutes = brk;
-        _defaultCycles        = cycles;
         _notifSessionStart    = (n['sessionStartAlert'] as bool?) ?? true;
         _notifHalfway         = (n['sessionHalfAlert']  as bool?) ?? false;
         _notifCycleEnd        = (n['pomodoroAlerts']     as bool?) ?? true;
-        if (!_isRunning && _completedSessions == 0) {
-          _currentSeconds    = work * 60;
-          _phaseTotalSeconds = work * 60;
-        }
       });
     } catch (_) {
       // ignore — defaults already in place
@@ -190,8 +180,10 @@ class _TimerScreenState extends State<TimerScreen>
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_currentSeconds > 0) {
-        setState(() => _currentSeconds--);
-        // Halfway reminder — fires once per work phase at the midpoint.
+        setState(() {
+          _currentSeconds--;
+          if (!_isBreak) _focusElapsedSeconds++;
+        });
         if (_notifHalfway && !_isBreak && !_halfwayFired) {
           final halfPoint = (_phaseTotalSeconds / 2).round();
           if (_currentSeconds == halfPoint) {
@@ -226,6 +218,7 @@ class _TimerScreenState extends State<TimerScreen>
     _currentSeconds = _workDurationMinutes * 60;
     _phaseTotalSeconds = _workDurationMinutes * 60;
     _completedSessions = 0;
+    _focusElapsedSeconds = 0;
     _plannedCycles = 1;
     _goalController.clear();
     _sessionSubjectController.clear();
@@ -268,6 +261,7 @@ class _TimerScreenState extends State<TimerScreen>
   }
 
   void _startNewSessionFlow() {
+    _loadFocusPrefs();
     setState(() {
       _resetDraftSession();
       _setFlowStep(_SessionFlowStep.setup);
@@ -304,6 +298,18 @@ class _TimerScreenState extends State<TimerScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Select at least one checklist item before timer.'),
+        ),
+      );
+      return;
+    }
+
+    final incompleteCount = _checklist
+        .where((item) => item.isSelected && !item.isCompleted && !item.isSkipped)
+        .length;
+    if (incompleteCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one new task for the extra cycle.'),
         ),
       );
       return;
@@ -576,7 +582,8 @@ class _TimerScreenState extends State<TimerScreen>
       });
     }
 
-    if (!item.isCompleted &&
+    if (_flowStep != _SessionFlowStep.checklist &&
+        !item.isCompleted &&
         currentExpected != -1 &&
         index != currentExpected) {
       _animateChecklistTo(currentExpected);
@@ -961,7 +968,14 @@ class _TimerScreenState extends State<TimerScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _isBreak = false;
+                _currentSeconds = _workDurationMinutes * 60;
+                _phaseTotalSeconds = _workDurationMinutes * 60;
+              });
+            },
             child: const Text('Skip Break'),
           ),
           ElevatedButton(
@@ -978,6 +992,48 @@ class _TimerScreenState extends State<TimerScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _showQuickCreateCourse() async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Create New Course'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Course name',
+            hintText: 'e.g. BCS2033 or Data Structures',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (name == null || name.isEmpty || !mounted) return;
+    await DocumentService.createCourse(name);
+    if (!mounted) return;
+    setState(() {
+      _selectedSessionSubject = name;
+      _sessionSubjectController.text = name;
+    });
   }
 
   /// Shows a dialog to pick a document from the user's library as AI context.
@@ -1388,14 +1444,35 @@ class _TimerScreenState extends State<TimerScreen>
         quizAvailable: true);
   }
 
-  void _skipVerify() {
+  Future<void> _skipVerify() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Skip Verification?'),
+        content: const Text(
+            'Skipping will record a 0 for your verification score. Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Skip'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     setState(() {
       _verifyCorrect = 0;
       _verifyTotal = 0;
       _verifySubmitted = true;
     });
-    // Skipping a real quiz still counts as 0 for verification; but if no
-    // questions ever loaded, treat it as "no quiz" so it isn't penalised.
     _saveSessionWithVerification(
         correct: 0, total: 0, quizAvailable: _verifyQuestions.isNotEmpty);
   }
@@ -1424,7 +1501,7 @@ class _TimerScreenState extends State<TimerScreen>
     // whether *this* session is what grew the streak today.
     GeminiStudyService.getStreakInfo().then((info) {
       GeminiStudyService.saveSession(
-        focusMinutes: _completedSessions * _workDurationMinutes,
+        focusMinutes: (_focusElapsedSeconds / 60).round(),
         cycles: _completedSessions,
         plannedCycles: _plannedCycles,
         subject: _sessionSubjectController.text.trim(),
@@ -1445,7 +1522,7 @@ class _TimerScreenState extends State<TimerScreen>
     setState(() {
       _scoreQuizAvailable = quizAvailable;
       _celebrationXp = score.total;
-      _celebrationMinutes = _completedSessions * _workDurationMinutes;
+      _celebrationMinutes = (_focusElapsedSeconds / 60).round();
       _celebrationCycles = _completedSessions;
       _showCelebration = true;
       _setFlowStep(_SessionFlowStep.complete);
@@ -2674,6 +2751,18 @@ class _TimerScreenState extends State<TimerScreen>
                                 name.isNotEmpty && seenNames.add(name))
                             .map((name) => DropdownMenuItem(
                                 value: name, child: Text(name))),
+                        const DropdownMenuItem(
+                          value: '__create__',
+                          child: Row(
+                            children: [
+                              Icon(Icons.add_circle_outline_rounded,
+                                  size: 16, color: AppTheme.primaryColor),
+                              SizedBox(width: 8),
+                              Text('Create new course',
+                                  style: TextStyle(color: AppTheme.primaryColor)),
+                            ],
+                          ),
+                        ),
                       ];
                       final cur = _selectedSessionSubject;
                       final validVal =
@@ -2688,6 +2777,10 @@ class _TimerScreenState extends State<TimerScreen>
                         ),
                         items: items,
                         onChanged: (v) {
+                          if (v == '__create__') {
+                            _showQuickCreateCourse();
+                            return;
+                          }
                           setState(() {
                             _selectedSessionSubject = v;
                             _sessionSubjectController.text = v ?? '';
@@ -3130,7 +3223,7 @@ class _TimerScreenState extends State<TimerScreen>
     final selected = _checklist.where((item) => item.isSelected).toList();
     final done = selected.where((item) => item.isCompleted).length;
     final subject = _sessionSubjectController.text.trim();
-    final totalMinutes = _completedSessions * _workDurationMinutes;
+    final totalMinutes = (_focusElapsedSeconds / 60).round();
 
     return SingleChildScrollView(
       key: const ValueKey('session-complete-step'),
@@ -3259,7 +3352,8 @@ class _TimerScreenState extends State<TimerScreen>
                       _plannedCycles += 1;
                       _isBreak = false;
                       _currentSeconds = _workDurationMinutes * 60;
-                      _setFlowStep(_SessionFlowStep.timer);
+                      _phaseTotalSeconds = _workDurationMinutes * 60;
+                      _setFlowStep(_SessionFlowStep.checklist);
                     });
                   },
                   style: ElevatedButton.styleFrom(
@@ -3746,6 +3840,9 @@ class _TimerScreenState extends State<TimerScreen>
                 icon: Icons.skip_next_rounded,
                 onTap: () {
                   _timer?.cancel();
+                  if (!_isBreak && _currentSeconds > 0) {
+                    _focusElapsedSeconds += _currentSeconds;
+                  }
                   _onTimerComplete();
                 },
                 isDark: isDark,
@@ -4083,6 +4180,26 @@ class _TimerScreenState extends State<TimerScreen>
                 ),
               ),
             )
+          else if (_flowStep == _SessionFlowStep.checklist)
+            ReorderableListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              proxyDecorator: (child, index, animation) => Material(
+                color: Colors.transparent,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: child,
+              ),
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex--;
+                  final item = _checklist.removeAt(oldIndex);
+                  _checklist.insert(newIndex, item);
+                  _refreshChecklistFocus();
+                });
+              },
+              children: _buildChecklistRows(isDark),
+            )
           else
             Column(
               children: _buildChecklistRows(isDark),
@@ -4280,7 +4397,30 @@ class _TimerScreenState extends State<TimerScreen>
                             : 'Excluded from flow',
                       ),
                     IconButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Remove item?'),
+                            content: Text(
+                                'Remove "${item.title}" from the checklist?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.error,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Remove'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true || !mounted) return;
                         setState(() {
                           _cancelChecklistMorphTimer(item.id);
                           _checklist.removeAt(index);
@@ -4447,7 +4587,7 @@ class _TimerScreenState extends State<TimerScreen>
   }
 
   Widget _buildStatsCard(bool isDark) {
-    final totalFocusMinutes = _completedSessions * _workDurationMinutes;
+    final totalFocusMinutes = (_focusElapsedSeconds / 60).round();
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: AppTheme.getCardDecoration(

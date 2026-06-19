@@ -1900,7 +1900,7 @@ class _MarksSection extends StatelessWidget {
                     ),
                     TextButton.icon(
                       onPressed: () =>
-                          _showAddMarkDialog(context, courseNames: courseNames),
+                          _showAddMarkDialog(context, courseNames: courseNames, existingMarks: marks),
                       icon: const Icon(Icons.add_rounded, size: 16),
                       label: const Text('Add Mark'),
                       style: TextButton.styleFrom(
@@ -1933,9 +1933,10 @@ class _MarksSection extends StatelessWidget {
                         subject: sub,
                         marks: grouped[sub]!,
                         onAddMark: () => _showAddMarkDialog(context,
-                            subject: sub, courseNames: courseNames),
+                            subject: sub, courseNames: courseNames, existingMarks: marks),
                         onDeleteMark: (id) =>
                             _db?.collection('marks').doc(id).delete(),
+                        onEditMark: (m) => _showEditMarkDialog(context, m),
                       )),
               ],
             );
@@ -1959,6 +1960,7 @@ class _MarksSection extends StatelessWidget {
     BuildContext context, {
     String? subject,
     List<String> courseNames = const [],
+    List<Map<String, dynamic>> existingMarks = const [],
   }) async {
     String selectedSubject =
         subject ?? (courseNames.isNotEmpty ? courseNames.first : '');
@@ -2252,11 +2254,10 @@ class _MarksSection extends StatelessWidget {
                             final s = double.tryParse(scoreCtrl.text.trim());
                             final m = double.tryParse(maxCtrl.text.trim());
 
+                            final effectiveName = name.isEmpty ? selectedType : name;
                             String? err;
                             if (sub.isEmpty) {
                               err = 'Choose or enter a course.';
-                            } else if (name.isEmpty) {
-                              err = 'Give this mark a name.';
                             } else if (s == null) {
                               err = 'Enter a valid score.';
                             } else if (m == null || m <= 0) {
@@ -2265,6 +2266,15 @@ class _MarksSection extends StatelessWidget {
                               err = 'Score can\'t be negative.';
                             } else if (s > m) {
                               err = 'Score can\'t exceed the total ($m).';
+                            }
+                            if (err == null && m != null) {
+                              final courseMarks = existingMarks
+                                  .where((em) => (em['subject'] as String? ?? '') == sub);
+                              final usedTotal = courseMarks.fold<double>(
+                                  0, (acc, em) => acc + ((em['maxScore'] as num?) ?? 0));
+                              if (usedTotal + m > 100) {
+                                err = 'Total marks for this course would exceed 100 (${usedTotal.toInt()} already used).';
+                              }
                             }
                             if (err != null) {
                               setDialogState(() => errorText = err);
@@ -2279,7 +2289,7 @@ class _MarksSection extends StatelessWidget {
                               'markId': ref.id,
                               'userId': uid,
                               'subject': sub,
-                              'name': name,
+                              'name': effectiveName,
                               'type': selectedType,
                               'score': s,
                               'maxScore': m,
@@ -2317,6 +2327,158 @@ class _MarksSection extends StatelessWidget {
     scoreCtrl.dispose();
     maxCtrl.dispose();
   }
+
+  static Future<void> _showEditMarkDialog(
+    BuildContext context,
+    Map<String, dynamic> mark,
+  ) async {
+    final nameCtrl = TextEditingController(text: mark['name'] as String? ?? '');
+    final scoreCtrl = TextEditingController(
+        text: ((mark['score'] as num?) ?? 0).toString());
+    final maxCtrl = TextEditingController(
+        text: ((mark['maxScore'] as num?) ?? 100).toString());
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final surface = isDark ? const Color(0xFF0E1418) : Colors.white;
+          final field = isDark ? const Color(0xFF161D22) : const Color(0xFFF1F5F8);
+          final onSurface = isDark ? Colors.white : const Color(0xFF0F1A1F);
+          final onMuted = isDark ? Colors.white60 : const Color(0xFF5A6770);
+          final border = isDark ? const Color(0xFF24303A) : const Color(0xFFD4DEE4);
+
+          InputDecoration deco(String label) => InputDecoration(
+                labelText: label,
+                labelStyle: TextStyle(color: onMuted, fontSize: 13),
+                filled: true,
+                fillColor: field,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: border)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: border)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: IslaColors.primary, width: 1.6)),
+              );
+
+          return Dialog(
+            backgroundColor: surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: IslaColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.edit_rounded, color: IslaColors.primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('Edit Mark', style: TextStyle(color: onSurface, fontSize: 19, fontWeight: FontWeight.w700)),
+                  ]),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: nameCtrl,
+                    style: TextStyle(color: onSurface),
+                    decoration: deco('Name'),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: TextField(
+                      controller: scoreCtrl,
+                      style: TextStyle(color: onSurface),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: deco('Score'),
+                      onChanged: (_) => setDialogState(() {}),
+                    )),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('/', style: TextStyle(fontSize: 22, color: onMuted)),
+                    ),
+                    Expanded(child: TextField(
+                      controller: maxCtrl,
+                      style: TextStyle(color: onSurface),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: deco('Out of'),
+                      onChanged: (_) => setDialogState(() {}),
+                    )),
+                  ]),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      const Icon(Icons.error_outline_rounded, color: Color(0xFFFF4E4E), size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(errorText!, style: const TextStyle(color: Color(0xFFFF4E4E), fontSize: 12.5))),
+                    ]),
+                  ],
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('Cancel', style: TextStyle(color: onMuted)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final name = nameCtrl.text.trim();
+                          final s = double.tryParse(scoreCtrl.text.trim());
+                          final m = double.tryParse(maxCtrl.text.trim());
+                          String? err;
+                          if (s == null) {
+                            err = 'Enter a valid score.';
+                          } else if (m == null || m <= 0) {
+                            err = 'Enter a valid total.';
+                          } else if (s < 0) {
+                            err = 'Score can\'t be negative.';
+                          } else if (s > m) {
+                            err = 'Score can\'t exceed the total.';
+                          }
+                          if (err != null) {
+                            setDialogState(() => errorText = err);
+                            return;
+                          }
+                          final db = _db;
+                          if (db == null) return;
+                          final id = mark['id'] as String?;
+                          if (id == null) return;
+                          await db.collection('marks').doc(id).update({
+                            'name': name.isEmpty ? (mark['type'] ?? 'Mark') : name,
+                            'score': s,
+                            'maxScore': m,
+                            'percentage': (s! / m! * 100).roundToDouble(),
+                          });
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: IslaColors.primary,
+                          foregroundColor: IslaColors.onPrimaryContainer,
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    nameCtrl.dispose();
+    scoreCtrl.dispose();
+    maxCtrl.dispose();
+  }
 }
 
 // ─── Subject Marks Card ─────────────────────────────────────────────────────
@@ -2326,12 +2488,14 @@ class _SubjectMarksCard extends StatelessWidget {
   final List<Map<String, dynamic>> marks;
   final VoidCallback onAddMark;
   final void Function(String id) onDeleteMark;
+  final void Function(Map<String, dynamic> mark)? onEditMark;
 
   const _SubjectMarksCard({
     required this.subject,
     required this.marks,
     required this.onAddMark,
     required this.onDeleteMark,
+    this.onEditMark,
   });
 
   double get _average {
@@ -2497,12 +2661,47 @@ class _SubjectMarksCard extends StatelessWidget {
                     ),
                     PopupMenuButton<String>(
                       icon: Icon(Icons.more_vert, size: 14, color: onMute),
-                      onSelected: (v) {
-                        if (v == 'delete') {
-                          onDeleteMark(m['id'] as String);
+                      onSelected: (v) async {
+                        if (v == 'edit') {
+                          onEditMark?.call(m);
+                        } else if (v == 'delete') {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete mark?'),
+                              content: Text(
+                                  'Delete "${m['name'] ?? m['type'] ?? 'this mark'}"? This cannot be undone.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            onDeleteMark(m['id'] as String);
+                          }
                         }
                       },
                       itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(children: [
+                            Icon(Icons.edit_outlined,
+                                size: 14, color: IslaColors.primary),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ]),
+                        ),
                         const PopupMenuItem(
                           value: 'delete',
                           child: Row(children: [

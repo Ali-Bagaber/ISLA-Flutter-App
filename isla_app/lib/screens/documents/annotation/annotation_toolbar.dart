@@ -115,33 +115,44 @@ class AnnotationTopToolbar extends StatelessWidget {
                   ],
                 ),
               ),
-              if (enabled) ...[
-                _ModeToggle(drawMode: drawMode, onChanged: onModeChanged),
-                const SizedBox(width: 4),
-                _BarIconButton(
-                  icon: Icons.undo_rounded,
-                  tooltip: 'Undo',
-                  enabled: canUndo,
-                  onTap: onUndo,
-                ),
-                _BarIconButton(
-                  icon: Icons.redo_rounded,
-                  tooltip: 'Redo',
-                  enabled: canRedo,
-                  onTap: onRedo,
-                ),
-                _BarIconButton(
-                  icon: Icons.delete_outline_rounded,
-                  tooltip: 'Clear page',
-                  enabled: canClear,
-                  onTap: onClearPage,
-                ),
-                const SizedBox(width: 4),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, right: 8),
-                  child: _SaveButton(saving: saving, onTap: onSave),
-                ),
-              ] else if (onRetry != null)
+              if (enabled)
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ModeToggle(drawMode: drawMode, onChanged: onModeChanged),
+                        const SizedBox(width: 4),
+                        _BarIconButton(
+                          icon: Icons.undo_rounded,
+                          tooltip: 'Undo',
+                          enabled: canUndo,
+                          onTap: onUndo,
+                        ),
+                        _BarIconButton(
+                          icon: Icons.redo_rounded,
+                          tooltip: 'Redo',
+                          enabled: canRedo,
+                          onTap: onRedo,
+                        ),
+                        _BarIconButton(
+                          icon: Icons.delete_outline_rounded,
+                          tooltip: 'Clear page',
+                          enabled: canClear,
+                          onTap: onClearPage,
+                        ),
+                        const SizedBox(width: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, right: 8),
+                          child: _SaveButton(saving: saving, onTap: onSave),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (onRetry != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: TextButton.icon(

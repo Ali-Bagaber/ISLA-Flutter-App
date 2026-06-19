@@ -342,9 +342,9 @@ class DocumentDetailScreen extends StatelessWidget {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    icon: const Icon(Icons.download_rounded, size: 18),
                     label: const Text(
-                      'Open Document',
+                      'Download Document',
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),

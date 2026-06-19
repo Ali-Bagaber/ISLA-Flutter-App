@@ -166,8 +166,33 @@ class UserSettingsService {
     if (db == null || uid == null) return Stream.value(defaultSubjects);
     return db.collection('user_settings').doc(uid).snapshots().map((snap) {
       final raw = snap.data()?['subjects'];
-      if (raw is List && raw.isNotEmpty) return List<String>.from(raw);
+      if (raw is List && raw.isNotEmpty) {
+        final saved = List<String>.from(raw);
+        final merged = List<String>.from(defaultSubjects);
+        for (final s in saved) {
+          if (!merged.contains(s)) merged.add(s);
+        }
+        return merged;
+      }
       return defaultSubjects;
+    });
+  }
+
+  /// Like [watchSubjects] but filters out the built-in defaults,
+  /// returning only subjects the user explicitly added.
+  static Stream<List<String>> watchUserSubjects() {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return Stream.value([]);
+    final defaultSet = Set<String>.from(defaultSubjects);
+    return db.collection('user_settings').doc(uid).snapshots().map((snap) {
+      final raw = snap.data()?['subjects'];
+      if (raw is List && raw.isNotEmpty) {
+        return List<String>.from(raw)
+            .where((s) => !defaultSet.contains(s))
+            .toList();
+      }
+      return <String>[];
     });
   }
 
@@ -179,6 +204,23 @@ class UserSettingsService {
     final raw = snap.data()?['subjects'];
     if (raw is List && raw.isNotEmpty) return List<String>.from(raw);
     return defaultSubjects;
+  }
+
+  /// Like [loadSubjects] but filters out the built-in defaults,
+  /// returning only subjects the user explicitly added.
+  static Future<List<String>> loadUserSubjects() async {
+    final db = _db;
+    final uid = _userId;
+    if (db == null || uid == null) return [];
+    final defaultSet = Set<String>.from(defaultSubjects);
+    final snap = await db.collection('user_settings').doc(uid).get();
+    final raw = snap.data()?['subjects'];
+    if (raw is List && raw.isNotEmpty) {
+      return List<String>.from(raw)
+          .where((s) => !defaultSet.contains(s))
+          .toList();
+    }
+    return [];
   }
 
   // ── XP / Level ──────────────────────────────────────────────────────────────

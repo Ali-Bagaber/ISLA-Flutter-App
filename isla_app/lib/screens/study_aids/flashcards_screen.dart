@@ -22,7 +22,9 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
   bool _showAnswer = false;
   List<Map<String, String>> _allCards = [];
   List<Map<String, String>> _deck = [];        // current deck being studied
-  Map<int, _Confidence> _confidence = {};      // originalIndex → confidence
+  Map<int, _Confidence> _confidence = {};      // deck-index → confidence
+  int _firstRoundKnown = 0;                    // cards known on first attempt
+  int _reviewRounds = 0;                       // how many review rounds needed
   bool _inReviewMode = false;
   bool _sessionComplete = false;
   String _loadingMessage = 'Generating flashcards...';
@@ -51,6 +53,8 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
       _allCards = [];
       _deck = [];
       _confidence = {};
+      _firstRoundKnown = 0;
+      _reviewRounds = 0;
       _inReviewMode = false;
       _sessionComplete = false;
       _cancelled = false;
@@ -115,16 +119,22 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
 
   void _finishDeck() {
     final needReview = <Map<String, String>>[];
+    var roundKnows = 0;
     for (var i = 0; i < _deck.length; i++) {
       final c = _confidence[i];
-      if (c == _Confidence.unsure || c == _Confidence.dontKnow) {
+      if (c == _Confidence.know) {
+        roundKnows++;
+      } else {
         needReview.add(_deck[i]);
       }
     }
+    if (!_inReviewMode) _firstRoundKnown = roundKnows;
 
     if (needReview.isEmpty) {
+      _confidence = {};
       _sessionComplete = true;
     } else {
+      _reviewRounds++;
       _deck = needReview;
       _currentIndex = 0;
       _confidence = {};
@@ -138,17 +148,13 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
       _currentIndex = 0;
       _showAnswer = false;
       _confidence = {};
+      _firstRoundKnown = 0;
+      _reviewRounds = 0;
       _inReviewMode = false;
       _sessionComplete = false;
     });
   }
 
-  int get _knowCount =>
-      _confidence.values.where((c) => c == _Confidence.know).length;
-  int get _unsureCount =>
-      _confidence.values.where((c) => c == _Confidence.unsure).length;
-  int get _dontKnowCount =>
-      _confidence.values.where((c) => c == _Confidence.dontKnow).length;
 
   @override
   Widget build(BuildContext context) {
@@ -241,7 +247,8 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
 
   Widget _buildComplete(bool isDark) {
     final total = _allCards.length;
-    final pct = total > 0 ? (_knowCount / total * 100).toInt() : 0;
+    final firstPct = total > 0 ? (_firstRoundKnown / total * 100).round() : 0;
+    final textSecondary = AppTheme.getTextSecondary(isDark);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -258,13 +265,12 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 size: 46, color: AppTheme.success),
           ),
           const SizedBox(height: 24),
-          Text('Session Complete!', style: AppTheme.headingLarge),
+          Text('All Cards Mastered!', style: AppTheme.headingLarge),
           const SizedBox(height: 8),
-          Text('You reviewed all ${_allCards.length} cards',
+          Text('You reviewed all $total cards',
               style: AppTheme.bodyMedium
-                  .copyWith(color: AppTheme.textSecondary)),
+                  .copyWith(color: textSecondary)),
           const SizedBox(height: 32),
-          // Score breakdown
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -274,27 +280,44 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
             ),
             child: Column(
               children: [
-                Text('$pct% Mastered',
+                Text('$firstPct%',
                     style: AppTheme.headingLarge.copyWith(
-                        fontSize: 36, color: AppTheme.success)),
-                const SizedBox(height: 16),
-                _ScoreLine(
-                    label: 'Know it',
-                    count: _knowCount,
-                    total: total,
-                    color: AppTheme.success),
-                const SizedBox(height: 8),
-                _ScoreLine(
-                    label: 'Almost',
-                    count: _unsureCount,
-                    total: total,
-                    color: AppTheme.warning),
-                const SizedBox(height: 8),
-                _ScoreLine(
-                    label: 'Still learning',
-                    count: _dontKnowCount,
-                    total: total,
-                    color: AppTheme.error),
+                        fontSize: 42, color: AppTheme.success)),
+                const SizedBox(height: 4),
+                Text('First-try accuracy',
+                    style: AppTheme.bodySmall.copyWith(color: textSecondary)),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatTile(
+                        icon: Icons.check_circle_rounded,
+                        iconColor: AppTheme.success,
+                        value: '$_firstRoundKnown / $total',
+                        label: 'Known first try',
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatTile(
+                        icon: _reviewRounds == 0
+                            ? Icons.star_rounded
+                            : Icons.replay_rounded,
+                        iconColor: _reviewRounds == 0
+                            ? AppTheme.warning
+                            : AppTheme.primaryColor,
+                        value: _reviewRounds == 0
+                            ? 'Perfect!'
+                            : '$_reviewRounds',
+                        label: _reviewRounds == 0
+                            ? 'No review needed'
+                            : 'Review round${_reviewRounds == 1 ? '' : 's'}',
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -572,46 +595,43 @@ class _ConfidenceButton extends StatelessWidget {
   }
 }
 
-class _ScoreLine extends StatelessWidget {
+class _StatTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String value;
   final String label;
-  final int count;
-  final int total;
-  final Color color;
+  final bool isDark;
 
-  const _ScoreLine({
+  const _StatTile({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
     required this.label,
-    required this.count,
-    required this.total,
-    required this.color,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final pct = total > 0 ? count / total : 0.0;
-    return Row(
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text(label,
-              style: AppTheme.bodySmall, overflow: TextOverflow.ellipsis),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 7,
-              backgroundColor: color.withValues(alpha: 0.12),
-              valueColor: AlwaysStoppedAnimation(color),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text('$count',
-            style: AppTheme.bodySmall
-                .copyWith(color: color, fontWeight: FontWeight.w700)),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: iconColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(height: 8),
+          Text(value,
+              style: AppTheme.headingSmall
+                  .copyWith(color: AppTheme.getTextPrimary(isDark))),
+          const SizedBox(height: 2),
+          Text(label,
+              style: AppTheme.bodySmall
+                  .copyWith(color: AppTheme.getTextSecondary(isDark), fontSize: 11),
+              textAlign: TextAlign.center),
+        ],
+      ),
     );
   }
 }

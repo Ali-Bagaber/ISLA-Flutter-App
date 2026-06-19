@@ -22,16 +22,8 @@ class FinalizeSetupScreen extends StatefulWidget {
 }
 
 class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
-  int _step = 0;
   _StudyGoal _selectedGoal = _StudyGoal.aceExams;
-  String _studyFocus = 'Operating Systems';
-  DateTime _deadline = DateTime.now().add(const Duration(days: 14));
-  int _sessionMinutes = 25;
-  /// Days the user plans to study. 1=Mon … 7=Sun. Default: every day.
-  Set<int> _studyDays = {1, 2, 3, 4, 5, 6, 7};
   bool _saving = false;
-
-  static const _dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   /// Persist the onboarding choices + flip onboardingComplete to true so
   /// AuthGate sends the user straight to the app on subsequent launches.
@@ -39,19 +31,12 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
     if (_saving) return;
     setState(() => _saving = true);
 
-    // Firestore can hit a transient internal-state error on web when the
-    // WebChannel reconnects mid-write. Retry once after a short pause.
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         await UserSettingsService.saveStudyPlan(
           onboardingComplete: true,
           goal: _selectedGoal.name,
-          focusSubject: _studyFocus,
-          deadline: _deadline,
-          sessionMinutes: _sessionMinutes,
-          studyDays: _studyDays.toList()..sort(),
         );
-        await UserSettingsService.saveFocus(workMinutes: _sessionMinutes);
         if (!mounted) return;
         context.goNamed('app');
         return;
@@ -92,8 +77,6 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
     _StudyGoal.stayConsistent: Icons.check_circle_outline_rounded,
   };
 
-  static const _sessionOptions = [15, 25, 50];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,7 +89,7 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
               opacity: animation,
               child: child,
             ),
-            child: _step == 0 ? _buildGoalStep() : _buildPersonalizeStep(),
+            child: _buildGoalStep(),
           ),
         ),
       ),
@@ -163,256 +146,17 @@ class _FinalizeSetupScreenState extends State<FinalizeSetupScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const _PageDots(current: 2, total: 4),
+          const _PageDots(current: 2, total: 3),
           const SizedBox(height: 24),
           CyanGradientButton(
-            label: 'Continue',
-            onTap: () => setState(() => _step = 1),
+            label: _saving ? 'Setting up...' : 'Get Started',
+            onTap: _saving ? () {} : () => _finishSetup(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPersonalizeStep() {
-    final d = _deadline;
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final deadlineStr = '${d.day} ${months[d.month]} ${d.year}';
-
-    return Padding(
-      key: const ValueKey('personalize'),
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          IconButton(
-            icon: const Icon(Icons.arrow_back, size: 16),
-            color: IslaColors.onSurfaceVariant,
-            onPressed: () => setState(() => _step = 0),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "Let's personalize\nISLA for you.",
-            style: GoogleFonts.manrope(
-              fontSize: 36,
-              fontWeight: FontWeight.w800,
-              color: IslaColors.onSurface,
-              height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'A few quick details to help ISLA fit your needs.',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: IslaColors.onSurfaceVariant,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const _FormLabel('Study Focus'),
-          const SizedBox(height: 8),
-          StreamBuilder<List<String>>(
-            stream: UserSettingsService.watchSubjects(),
-            builder: (context, snap) {
-              final subjects = snap.data ?? UserSettingsService.defaultSubjects;
-              return _DropdownField(
-                value: subjects.contains(_studyFocus) ? _studyFocus : subjects.first,
-                items: subjects,
-                onChanged: (v) => setState(() => _studyFocus = v),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Study Deadline'),
-          const SizedBox(height: 8),
-          _TappableField(
-            label: deadlineStr,
-            icon: Icons.calendar_today_outlined,
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _deadline,
-                firstDate: DateTime.now(),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
-                builder: (ctx, child) => Theme(
-                  data: ThemeData.dark().copyWith(
-                    colorScheme: const ColorScheme.dark(
-                      primary: IslaColors.primary,
-                      onPrimary: IslaColors.onPrimary,
-                      surface: IslaColors.surfaceContainerHigh,
-                    ),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (picked != null) setState(() => _deadline = picked);
-            },
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Session Goal Time'),
-          const SizedBox(height: 8),
-          Row(
-            children: List.generate(_sessionOptions.length, (i) {
-              final mins = _sessionOptions[i];
-              final active = _sessionMinutes == mins;
-              return Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    right: i < _sessionOptions.length - 1 ? 8 : 0,
-                  ),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _sessionMinutes = mins),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: active
-                            ? IslaColors.primary.withValues(alpha: 0.1)
-                            : IslaColors.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: active
-                              ? IslaColors.primary.withValues(alpha: 0.5)
-                              : IslaColors.outlineVariant,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '$mins',
-                            style: GoogleFonts.manrope(
-                              color: active
-                                  ? IslaColors.primary
-                                  : IslaColors.onSurface,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 17,
-                            ),
-                          ),
-                          Text(
-                            'min',
-                            style: GoogleFonts.inter(
-                              color: IslaColors.onSurfaceVariant,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 16),
-          const _FormLabel('Study Days'),
-          const SizedBox(height: 4),
-          Text(
-            'Which days of the week do you plan to study? You\'ll get a gentle nudge if you miss one.',
-            style: GoogleFonts.inter(
-              fontSize: 11.5,
-              color: IslaColors.onSurfaceVariant,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: List.generate(7, (i) {
-              final day = i + 1; // 1=Mon … 7=Sun
-              final selected = _studyDays.contains(day);
-              return Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(right: i < 6 ? 6 : 0),
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      if (selected) {
-                        if (_studyDays.length > 1) _studyDays.remove(day);
-                      } else {
-                        _studyDays.add(day);
-                      }
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? IslaColors.primary.withValues(alpha: 0.14)
-                            : IslaColors.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected
-                              ? IslaColors.primary.withValues(alpha: 0.55)
-                              : IslaColors.outlineVariant,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _dayLabels[i],
-                          style: GoogleFonts.inter(
-                            color: selected
-                                ? IslaColors.primary
-                                : IslaColors.onSurfaceVariant,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 6),
-          Center(
-            child: TextButton(
-              onPressed: () => setState(
-                () => _studyDays = {1, 2, 3, 4, 5, 6, 7},
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                'Every day',
-                style: GoogleFonts.inter(
-                  color: _studyDays.length == 7
-                      ? IslaColors.primary
-                      : IslaColors.onSurfaceVariant,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const _PageDots(current: 3, total: 4),
-          const SizedBox(height: 24),
-          CyanGradientButton(
-            label: _saving ? 'Saving…' : 'Finish Setup',
-            onTap: _saving ? () {} : _finishSetup,
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ── Goal tile ─────────────────────────────────────────────────────────────────
@@ -516,125 +260,6 @@ class _GoalTile extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Form helpers ───────────────────────────────────────────────────────────────
-
-class _FormLabel extends StatelessWidget {
-  final String text;
-
-  const _FormLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: GoogleFonts.inter(
-        color: IslaColors.onSurfaceVariant,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.9,
-      ),
-    );
-  }
-}
-
-class _TappableField extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _TappableField({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: IslaColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: IslaColors.outlineVariant),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: IslaColors.onSurfaceVariant, size: 18),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: IslaColors.onSurface,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: IslaColors.onSurfaceVariant,
-              size: 18,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DropdownField extends StatelessWidget {
-  final String value;
-  final List<String> items;
-  final ValueChanged<String> onChanged;
-
-  const _DropdownField({
-    required this.value,
-    required this.items,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: IslaColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: IslaColors.outlineVariant),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          dropdownColor: IslaColors.surfaceContainerHigh,
-          style: GoogleFonts.inter(
-            color: IslaColors.onSurface,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: IslaColors.onSurfaceVariant,
-          ),
-          items: items
-              .map(
-                (s) => DropdownMenuItem(value: s, child: Text(s)),
-              )
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
         ),
       ),
     );

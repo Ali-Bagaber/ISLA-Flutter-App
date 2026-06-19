@@ -195,6 +195,38 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     super.dispose();
   }
 
+  Future<void> _showQuickCreateCourse() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create Course'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'Course name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    final name = controller.text.trim();
+    controller.dispose();
+    if (confirmed == true && name.isNotEmpty) {
+      await DocumentService.createCourse(name);
+      if (mounted) setState(() => _selectedSubject = name);
+    }
+  }
+
   Widget _buildDeadlineHint(Color textSecondary) {
     final due = DateTime(
       _selectedDate.year, _selectedDate.month, _selectedDate.day,
@@ -314,6 +346,18 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                           child: Text(name),
                         );
                       }),
+                      const DropdownMenuItem<String>(
+                        value: '__create__',
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_circle_outline_rounded,
+                                size: 16, color: AppTheme.primaryColor),
+                            SizedBox(width: 8),
+                            Text('Create new course',
+                                style: TextStyle(color: AppTheme.primaryColor)),
+                          ],
+                        ),
+                      ),
                     ];
                     return DropdownButtonFormField<String>(
                       initialValue: items.any((i) => i.value == _selectedSubject)
@@ -323,7 +367,13 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                         prefixIcon: Icon(Icons.book_outlined, size: 18),
                       ),
                       items: items,
-                      onChanged: (v) => setState(() => _selectedSubject = v),
+                      onChanged: (v) {
+                        if (v == '__create__') {
+                          _showQuickCreateCourse();
+                          return;
+                        }
+                        setState(() => _selectedSubject = v);
+                      },
                     );
                   },
                 ),

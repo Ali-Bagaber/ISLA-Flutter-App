@@ -167,6 +167,12 @@ class _QuizScreenState extends State<QuizScreen> {
       appBar: AppBar(
         backgroundColor: AppTheme.getBackgroundColor(isDark),
         surfaceTintColor: Colors.transparent,
+        leading: _showReview
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => setState(() => _showReview = false),
+              )
+            : null,
         title: Text(_showReview ? 'Review Answers' : 'Quiz'),
         actions: [
           if (_quizStarted && !_quizCompleted && !_showReview)

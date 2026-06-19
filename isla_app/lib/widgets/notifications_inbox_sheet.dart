@@ -188,7 +188,7 @@ class _NotificationsInboxSheetState extends State<_NotificationsInboxSheet> {
                     style: AppTheme.labelMedium
                         .copyWith(color: AppTheme.warning)),
                 const SizedBox(height: 6),
-                ..._upcomingTasks.map((t) => ListTile(
+                ..._upcomingTasks.take(5).map((t) => ListTile(
                       dense: true,
                       leading: const Icon(Icons.access_time_rounded,
                           color: AppTheme.warning),

@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/document_service.dart';
 import '../../services/nav_controller.dart';
 import '../../services/task_service.dart';
 import '../../theme/app_theme.dart';
@@ -15,6 +16,7 @@ import '../../theme/theme_provider.dart';
 import '../../widgets/confetti_overlay.dart';
 import '../../widgets/hover_lift.dart';
 import '../../widgets/isla_logo.dart';
+import '../../widgets/notifications_inbox_sheet.dart';
 import '../../widgets/page_entrance.dart';
 import '../../widgets/streak_card.dart';
 import '../planner/add_task_screen.dart';
@@ -479,81 +481,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return user.displayName?.split(' ').first ?? user.email?.split('@').first ?? 'Alex';
   }
 
-  /// Bell icon → quick view of today's tasks + upcoming as an in-app inbox.
-  /// We don't keep a separate notification log; this is a live snapshot.
-  void _showNotificationsInbox() {
-    final pending = _todayTasks.where((t) => t['completed'] != true).toList();
-    final upcoming = _upcomingTasks;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.notifications_outlined,
-                      color: AppTheme.primaryColor),
-                  const SizedBox(width: 8),
-                  Text('Notifications', style: AppTheme.headingSmall),
-                ],
-              ),
-              const SizedBox(height: 14),
-              if (pending.isEmpty && upcoming.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Center(
-                    child: Text(
-                      'You\'re all caught up. Nothing to remind you of.',
-                      style: AppTheme.bodySmall.copyWith(
-                          color: AppTheme.getTextSecondary(true)),
-                    ),
-                  ),
-                )
-              else ...[
-                if (pending.isNotEmpty) ...[
-                  Text('Due today',
-                      style: AppTheme.labelMedium
-                          .copyWith(color: AppTheme.primaryColor)),
-                  const SizedBox(height: 6),
-                  ...pending.take(3).map((t) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.calendar_today_rounded,
-                            color: AppTheme.primaryColor),
-                        title: Text(t['title']?.toString() ?? ''),
-                        subtitle: Text(t['subject']?.toString() ?? ''),
-                      )),
-                  const SizedBox(height: 8),
-                ],
-                if (upcoming.isNotEmpty) ...[
-                  Text('Upcoming',
-                      style: AppTheme.labelMedium
-                          .copyWith(color: AppTheme.warning)),
-                  const SizedBox(height: 6),
-                  ...upcoming.map((t) => ListTile(
-                        dense: true,
-                        leading: const Icon(
-                            Icons.access_time_rounded,
-                            color: AppTheme.warning),
-                        title: Text(t['title']?.toString() ?? ''),
-                        subtitle: Text(_formatDue(t['dueDate'])),
-                      )),
-                ],
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   /// Avatar icon → small menu (View profile / Sign out).
   void _showAvatarMenu() {
     showModalBottomSheet(
@@ -627,7 +554,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const IslaLogo(markSize: 28, textSize: 17),
                   const Spacer(),
                   IconButton(
-                    onPressed: _showNotificationsInbox,
+                    onPressed: () => showIslaNotificationsInbox(context),
                     icon: Icon(Icons.notifications_outlined, color: textSecondary, size: 22),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -946,6 +873,98 @@ class _HomeScreenState extends State<HomeScreen> {
                       bestStreak: _bestStreak,
                       last7: _last7,
                       onTap: () => context.read<NavController>().goAnalytics(),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── My Courses ───────────────────────────────────
+                    _SectionHeader(
+                      title: 'My Courses',
+                      trailing: TextButton(
+                        onPressed: () => context.read<NavController>().goDocs(),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          'View All',
+                          style: GoogleFonts.inter(
+                            color: primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 10),
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: DocumentService.watchCourses(),
+                      builder: (context, snap) {
+                        final courses = snap.data ?? [];
+                        if (courses.isEmpty) {
+                          return GestureDetector(
+                            onTap: () => context.read<NavController>().goDocs(),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: primary.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: primary.withValues(alpha: 0.18)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.add_circle_outline_rounded, color: primary, size: 20),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Add your courses in Documents',
+                                      style: GoogleFonts.inter(
+                                        color: textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right_rounded, color: textSecondary, size: 18),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: courses.map((c) {
+                            final name = (c['name'] as String? ?? '').trim();
+                            final idx = courses.indexOf(c);
+                            final color = AppTheme.subjectColors[idx % AppTheme.subjectColors.length];
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: color.withValues(alpha: 0.25)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.menu_book_rounded, size: 14, color: color),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    name,
+                                    style: GoogleFonts.inter(
+                                      color: textPrimary,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 20),

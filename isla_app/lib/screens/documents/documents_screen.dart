@@ -100,18 +100,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         ],
       ),
     );
-    if (confirmed == true && controller.text.trim().isNotEmpty) {
-      await DocumentService.createCourse(controller.text.trim());
+    final name = controller.text.trim();
+    controller.dispose();
+    if (confirmed == true && name.isNotEmpty) {
+      await DocumentService.createCourse(name);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Course "${controller.text.trim()}" created'),
+            content: Text('Course "$name" created'),
             backgroundColor: AppTheme.success,
           ),
         );
       }
     }
-    controller.dispose();
   }
 
   Future<void> _confirmDeleteCourse(String courseId, String courseName) async {
@@ -419,8 +420,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           FloatingActionButton.extended(
             heroTag: 'newCourseFab',
             onPressed: _showCreateCourseDialog,
-            backgroundColor: AppTheme.getCardColor(isDark),
-            foregroundColor: AppTheme.primaryColor,
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
             elevation: 2,
             icon: const Icon(Icons.create_new_folder_rounded),
             label: const Text('New Course'),

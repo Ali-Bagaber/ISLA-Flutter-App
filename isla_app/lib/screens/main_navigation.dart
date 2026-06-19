@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -325,8 +328,15 @@ class _NavBarItem extends StatelessWidget {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-class _ProfilePage extends StatelessWidget {
+class _ProfilePage extends StatefulWidget {
   const _ProfilePage();
+
+  @override
+  State<_ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<_ProfilePage> {
+  bool _uploadingPhoto = false;
 
   static Stream<int> _streakStream() {
     if (Firebase.apps.isEmpty) return Stream.value(0);
@@ -419,55 +429,65 @@ class _ProfilePage extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        // Avatar with edit badge
-                        Stack(
-                          children: [
-                            Container(
-                              width: 92,
-                              height: 92,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Color(0xFF00E3FD), Color(0xFF6BB9FF)],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: primary.withValues(alpha: 0.35),
-                                    blurRadius: 24,
-                                    offset: const Offset(0, 8),
+                        // Avatar with camera badge
+                        GestureDetector(
+                          onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 92,
+                                height: 92,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF00E3FD), Color(0xFF6BB9FF)],
                                   ),
-                                ],
-                              ),
-                              child: user?.photoURL != null
-                                  ? ClipOval(
-                                      child: Image.network(
-                                        user!.photoURL!,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Center(
-                                          child: Text(initials,
-                                              style: GoogleFonts.manrope(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 30)),
-                                        ),
-                                      ),
-                                    )
-                                  : Center(
-                                      child: Text(initials,
-                                          style: GoogleFonts.manrope(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 30)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: primary.withValues(alpha: 0.35),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
                                     ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: () => _showEditProfileSheet(
-                                    context, displayName, studentId, faculty, semester),
+                                  ],
+                                ),
+                                child: _uploadingPhoto
+                                    ? const Center(
+                                        child: SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2.5, color: Colors.white),
+                                        ),
+                                      )
+                                    : (data?['photoUrl'] as String?)?.isNotEmpty == true
+                                        ? ClipOval(
+                                            child: Image.network(
+                                              data!['photoUrl'] as String,
+                                              width: 92,
+                                              height: 92,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Center(
+                                                child: Text(initials,
+                                                    style: GoogleFonts.manrope(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 30)),
+                                              ),
+                                            ),
+                                          )
+                                        : Center(
+                                            child: Text(initials,
+                                                style: GoogleFonts.manrope(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 30)),
+                                          ),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
                                 child: Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
@@ -475,12 +495,12 @@ class _ProfilePage extends StatelessWidget {
                                     shape: BoxShape.circle,
                                     border: Border.all(color: bg, width: 2),
                                   ),
-                                  child: const Icon(Icons.edit_rounded,
+                                  child: const Icon(Icons.camera_alt_rounded,
                                       color: Colors.white, size: 12),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 14),
                         Text(displayName,
@@ -792,6 +812,55 @@ class _ProfilePage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // ── Pick & upload profile photo ──────────────────────────────────────────
+  Future<void> _pickAndUploadPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+
+    setState(() => _uploadingPhoto = true);
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final ext = file.extension ?? 'jpg';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('$uid.$ext');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/$ext'));
+      final url = await ref.getDownloadURL();
+
+      await Future.wait([
+        FirebaseAuth.instance.currentUser!.updatePhotoURL(url),
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set({'photoUrl': url}, SetOptions(merge: true)),
+      ]);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Profile photo updated'),
+              backgroundColor: AppTheme.primaryColor),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
   }
 
   // ── Edit Profile sheet ───────────────────────────────────────────────────

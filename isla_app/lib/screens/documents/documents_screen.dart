@@ -101,7 +101,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ),
     );
     final name = controller.text.trim();
-    controller.dispose();
     if (confirmed == true && name.isNotEmpty) {
       await DocumentService.createCourse(name);
       if (mounted) {

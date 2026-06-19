@@ -220,7 +220,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       ),
     );
     final name = controller.text.trim();
-    controller.dispose();
     if (confirmed == true && name.isNotEmpty) {
       await DocumentService.createCourse(name);
       if (mounted) setState(() => _selectedSubject = name);

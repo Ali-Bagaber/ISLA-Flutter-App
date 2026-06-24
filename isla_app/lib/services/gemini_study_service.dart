@@ -7,12 +7,16 @@ import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import 'auth_service.dart';
 
-/// Gemini AI service for generating summaries, flashcards, and quiz questions.
+/// AI service for generating summaries, flashcards, and quiz questions.
 /// Saves content to: summaries, flashcards, quiz_aids collections.
 class GeminiStudyService {
   final Dio _dio;
 
   GeminiStudyService({Dio? dio}) : _dio = dio ?? Dio();
+
+  /// Display name of the AI provider that answered the most recent request.
+  /// Read this right after a generate* call to label the result accurately.
+  String lastProvider = 'Groq AI';
 
   static FirebaseFirestore? get _db {
     if (Firebase.apps.isEmpty) return null;
@@ -21,9 +25,6 @@ class GeminiStudyService {
 
   static String? get _userId => AuthService.currentUser?.uid;
 
-  final String _endpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/${AppConfig.geminiModel}:generateContent';
-
   static DateTime _safeCreatedAt(dynamic value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
@@ -31,81 +32,76 @@ class GeminiStudyService {
     return DateTime(1970);
   }
 
-  // ── Core request helper — Gemini → Groq → OpenRouter ───────────────────────
+  // ── Core request helper — Groq → Cerebras → SambaNova ──────────────────────
+  // All three are OpenAI-compatible, all running Llama 3.3 70B on free tiers.
+  // Three independent providers = if one 429s, the next picks up instantly.
 
   Future<String> _ask(
     String prompt, {
     void Function()? onRetrying,
     int maxTokens = 1024,
   }) async {
-    if (AppConfig.hasGeminiKey) {
-      try {
-        return await _callGemini(prompt, maxTokens: maxTokens);
-      } catch (_) {}
-    }
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        onRetrying?.call();
+        await Future.delayed(Duration(seconds: 3 * attempt));
+      }
 
-    onRetrying?.call();
+      // 1. Groq 
+      if (AppConfig.hasGroqKey) {
+        try {
+          final result = await _callOpenAiCompatible(
+            endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+            model: AppConfig.groqModel,
+            apiKey: AppConfig.groqApiKey,
+            prompt: prompt,
+            maxTokens: maxTokens,
+          );
+          lastProvider = 'Groq AI';
+          return result;
+        } catch (e) {
+          print('[ISLA AI] Groq failed (pass ${attempt + 1}): $e');
+        }
+      }
 
-    if (AppConfig.hasGroqKey) {
-      try {
-        return await _callOpenAiCompatible(
-          endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-          model: AppConfig.groqModel,
-          apiKey: AppConfig.groqApiKey,
-          prompt: prompt,
-          maxTokens: maxTokens,
-        );
-      } catch (_) {}
-    }
+      // 2. Cerebras .
+      if (AppConfig.hasCerebrasKey) {
+        try {
+          final result = await _callOpenAiCompatible(
+            endpoint: 'https://api.cerebras.ai/v1/chat/completions',
+            model: AppConfig.cerebrasModel,
+            apiKey: AppConfig.cerebrasApiKey,
+            prompt: prompt,
+            maxTokens: maxTokens,
+          );
+          lastProvider = 'Cerebras AI';
+          return result;
+        } catch (e) {
+          print('[ISLA AI] Cerebras failed (pass ${attempt + 1}): $e');
+        }
+      }
 
-    if (AppConfig.hasOpenRouterKey) {
-      try {
-        return await _callOpenAiCompatible(
-          endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-          model: AppConfig.openRouterModel,
-          apiKey: AppConfig.openRouterApiKey,
-          prompt: prompt,
-          maxTokens: maxTokens,
-          extraHeaders: {'HTTP-Referer': 'https://isla-app.dev'},
-        );
-      } catch (_) {}
+      // 3. SambaNova.
+      if (AppConfig.hasSambanovaKey) {
+        try {
+          final result = await _callOpenAiCompatible(
+            endpoint: 'https://api.sambanova.ai/v1/chat/completions',
+            model: AppConfig.sambanovaModel,
+            apiKey: AppConfig.sambanovaApiKey,
+            prompt: prompt,
+            maxTokens: maxTokens,
+          );
+          lastProvider = 'SambaNova AI';
+          return result;
+        } catch (e) {
+          print('[ISLA AI] SambaNova failed (pass ${attempt + 1}): $e');
+        }
+      }
     }
 
     throw StateError(
-      'All AI providers (Gemini, Groq, OpenRouter) are unavailable or quota-limited.',
+      'All AI providers (Groq, Cerebras, SambaNova) are unavailable or quota-limited.',
     );
-  }
-
-  Future<String> _callGemini(String prompt, {int maxTokens = 1024}) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      _endpoint,
-      queryParameters: {'key': AppConfig.geminiApiKey},
-      data: {
-        'contents': [
-          {
-            'role': 'user',
-            'parts': [
-              {'text': prompt}
-            ]
-          }
-        ],
-        'generationConfig': {'temperature': 0.4, 'maxOutputTokens': maxTokens},
-      },
-      options: Options(
-        sendTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 20),
-      ),
-    );
-
-    final candidates = response.data?['candidates'];
-    if (candidates is List && candidates.isNotEmpty) {
-      final parts = candidates.first['content']?['parts'];
-      if (parts is List && parts.isNotEmpty) {
-        final text = parts.first['text'];
-        if (text is String) return text;
-      }
-    }
-    throw StateError('Empty response from Gemini API');
   }
 
   Future<String> _callOpenAiCompatible({
@@ -182,7 +178,7 @@ class GeminiStudyService {
   ///   - bullets   : numbered list, count scales with document length.
   ///   - paragraph : detailed paragraphs, count scales with document length.
   Future<String> generateSummary({
-    required String title,
+    required String title,      
     required String subject,
     String documentText = '',
     String mode = 'bullets',
@@ -260,8 +256,14 @@ class GeminiStudyService {
         ? 'Create $count flashcards based on the following document.\n\n'
             'Title: "$title"\nSubject: $subject\n\n'
             'Content:\n${_trimForPrompt(documentText)}\n\n'
-            'Return ONLY a JSON array with "question" and "answer" keys. Answers: 1-2 sentences. No markdown.'
-        : 'Create $count flashcards for "$title" ($subject). Return ONLY a JSON array with "question" and "answer" keys. Answers: 1-2 sentences. No markdown.';
+            'Return ONLY a JSON array. Each item must have "question", "answer", and "imageKeyword" keys. '
+            '"imageKeyword" is a short 2-4 word English search phrase describing the visual topic of that specific card '
+            '(e.g. "cell division microscope", "newton gravity apple", "python code editor"). '
+            'Answers: 1-2 sentences. No markdown.'
+        : 'Create $count flashcards for "$title" ($subject). Return ONLY a JSON array. Each item must have "question", "answer", and "imageKeyword" keys. '
+            '"imageKeyword" is a short 2-4 word English search phrase describing the visual topic of that specific card '
+            '(e.g. "cell division microscope", "newton gravity apple", "python code editor"). '
+            'Answers: 1-2 sentences. No markdown.';
     final raw = await _ask(prompt, onRetrying: onRetrying);
     return _parseFlashcards(raw);
   }
@@ -286,6 +288,7 @@ class GeminiStudyService {
               return {
                 'question': (item['question'] ?? '').toString(),
                 'answer': (item['answer'] ?? '').toString(),
+                'imageKeyword': (item['imageKeyword'] ?? '').toString(),
               };
             })
             .where((m) => m['question']!.isNotEmpty)
@@ -309,8 +312,12 @@ class GeminiStudyService {
         ? 'Create $count MCQ questions based on the following document.\n\n'
             'Title: "$title"\nSubject: $subject\n\n'
             'Content:\n${_trimForPrompt(documentText)}\n\n'
-            'Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index). No markdown.'
-        : 'Create $count MCQ questions for "$title" ($subject). Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index). No markdown.';
+            'Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index), '
+            '"imageKeyword" (a short 2-4 word English search phrase describing the visual topic of that question, '
+            'e.g. "solar system planets", "human heart anatomy"). No markdown.'
+        : 'Create $count MCQ questions for "$title" ($subject). Return ONLY a JSON array. Each item: "question" (string), "options" (4 strings), "correct" (0-3 index), '
+            '"imageKeyword" (a short 2-4 word English search phrase describing the visual topic of that question, '
+            'e.g. "solar system planets", "human heart anatomy"). No markdown.';
     final raw = await _ask(prompt, onRetrying: onRetrying);
     return _parseQuiz(raw);
   }
@@ -337,6 +344,7 @@ class GeminiStudyService {
                         .toList() ??
                     [],
                 'correct': (item['correct'] as int?) ?? 0,
+                'imageKeyword': (item['imageKeyword'] ?? '').toString(),
               };
             })
             .where((m) => m['question'].toString().isNotEmpty)

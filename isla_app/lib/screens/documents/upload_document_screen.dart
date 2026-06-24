@@ -409,7 +409,8 @@ class _UploadDocumentScreenState extends State<UploadDocumentScreen> {
       await DocumentService.createCourse(name);
       if (mounted) setState(() => _selectedSubject = name);
     }
-    controller.dispose();
+    // Local dialog controller is GC'd; disposing it here while the dialog's
+    // TextField is still tearing down trips the _dependents.isEmpty assertion.
   }
 
   String _formatSize(int bytes) {

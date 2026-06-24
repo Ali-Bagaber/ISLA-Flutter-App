@@ -25,23 +25,31 @@ Future<void> main() async {
   // Hive must be initialised before ThemeProvider.load() reads the box.
   await Hive.initFlutter();
 
-  if (FirebaseRuntimeConfig.isConfigured) {
-    await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
+  try {
+    if (FirebaseRuntimeConfig.isConfigured) {
+      await Firebase.initializeApp(options: FirebaseRuntimeConfig.options);
+    }
+
+    if (kIsWeb && Firebase.apps.isNotEmpty) {
+      FirebaseFirestore.instance.settings =
+          const Settings(persistenceEnabled: false);
+    }
+  } catch (e) {
+    debugPrint('[ISLA] Firebase init error: $e');
   }
 
-  // On web, Firestore's IndexedDB persistence (enabled by default in SDK 11.x)
-  // causes INTERNAL ASSERTION FAILED errors on the first write of a new session.
-  // Disabling it forces all ops through the network and avoids that bad state.
-  if (kIsWeb && Firebase.apps.isNotEmpty) {
-    FirebaseFirestore.instance.settings =
-        const Settings(persistenceEnabled: false);
+  try {
+    await NotificationService.instance.init();
+  } catch (e) {
+    debugPrint('[ISLA] Notification init error: $e');
   }
 
-  await NotificationService.instance.init();
-
-  // Restore persisted theme before building the widget tree.
   final themeProvider = ThemeProvider();
-  await themeProvider.load();
+  try {
+    await themeProvider.load();
+  } catch (e) {
+    debugPrint('[ISLA] Theme load error: $e');
+  }
 
   runApp(
     ProviderScope(

@@ -105,6 +105,10 @@ class _TimerScreenState extends State<TimerScreen>
 
   // ── Verification / Quick Check state ────────────────────────────────────────
   bool _verifyLoading = false;
+  // Guards the one-time finish → Quick Check transition. Without it, a double
+  // _onTimerComplete (timer hitting 0 racing a manual finish) fires question
+  // generation twice — the 2nd call tripped the 429 and wiped the questions.
+  bool _sessionFinishing = false;
   String? _verifyError;
   List<Map<String, dynamic>> _verifyQuestions = [];
   final Map<int, int> _verifyAnswers = {}; // questionIndex → selectedOption
@@ -167,6 +171,7 @@ class _TimerScreenState extends State<TimerScreen>
       _phaseTotalSeconds = max(_phaseTotalSeconds, _currentSeconds);
       _isRunning         = true;
       _halfwayFired      = false;
+      _sessionFinishing  = false;
     });
 
     // Session-start alert (only on first cycle, not on resume after break).
@@ -349,6 +354,7 @@ class _TimerScreenState extends State<TimerScreen>
       _currentSeconds = _workDurationMinutes * 60;
       _phaseTotalSeconds = _workDurationMinutes * 60;
       _completedSessions = 0;
+      _sessionFinishing = false;
       _showAllTasksSuccessPulse = false;
       _showAllTasksSuccessCheck = false;
       for (final item in _checklist) {
@@ -359,6 +365,9 @@ class _TimerScreenState extends State<TimerScreen>
   }
 
   void _onTimerComplete() {
+    // Ignore any extra trigger once the session is already finishing — this is
+    // what fired the Quick Check generation twice and tripped the rate limit.
+    if (_sessionFinishing) return;
     _timer?.cancel();
     setState(() => _isRunning = false);
 
@@ -383,6 +392,8 @@ class _TimerScreenState extends State<TimerScreen>
       }
 
       if (_completedSessions >= _plannedCycles) {
+        // Mark finishing so any stray re-trigger is ignored (see _onTimerComplete).
+        _sessionFinishing = true;
         // Play a brief ring → checkmark animation, THEN advance to Quick Check.
         // Saving the session is deferred until after verification so the score
         // can include the verification result.
@@ -1026,7 +1037,8 @@ class _TimerScreenState extends State<TimerScreen>
         ],
       ),
     );
-    ctrl.dispose();
+    // Local dialog controller is GC'd; disposing it here while the dialog's
+    // TextField is still tearing down trips the _dependents.isEmpty assertion.
     if (name == null || name.isEmpty || !mounted) return;
     await DocumentService.createCourse(name);
     if (!mounted) return;
@@ -1412,6 +1424,14 @@ class _TimerScreenState extends State<TimerScreen>
       setState(() {
         _verifyQuestions = qs.take(3).toList();
         _verifyLoading = false;
+        if (_verifyQuestions.isEmpty) {
+          // The AI responded but produced no usable questions. Surface a clear
+          // message with Skip/Retry instead of a blank Quick Check screen.
+          _verifyError =
+              "Couldn't generate Quick Check questions from this material "
+              'right now (the AI may be rate-limited). Tap Retry, or Skip to '
+              'finish the session.';
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -1425,6 +1445,8 @@ class _TimerScreenState extends State<TimerScreen>
     }
   }
 
+  /// Grade the answers and reveal the in-place review (correct = green,
+  /// wrong pick = red). Saving + advancing happens on [_continueAfterReview].
   void _submitVerify() {
     if (_verifyQuestions.isEmpty) return;
     int correct = 0;
@@ -1438,9 +1460,14 @@ class _TimerScreenState extends State<TimerScreen>
       _verifyTotal = _verifyQuestions.length;
       _verifySubmitted = true;
     });
+  }
+
+  /// After the user has reviewed the marked answers, persist the session and
+  /// move on to the Session Score screen.
+  void _continueAfterReview() {
     _saveSessionWithVerification(
-        correct: correct,
-        total: _verifyQuestions.length,
+        correct: _verifyCorrect,
+        total: _verifyTotal,
         quizAvailable: true);
   }
 
@@ -1835,6 +1862,7 @@ class _TimerScreenState extends State<TimerScreen>
               final options =
                   ((q['options'] as List?) ?? []).cast<String>().toList();
               final picked = _verifyAnswers[qi];
+              final correctIdx = (q['correct'] as num?)?.toInt() ?? 0;
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(14),
@@ -1862,42 +1890,65 @@ class _TimerScreenState extends State<TimerScreen>
                     const SizedBox(height: 10),
                     ...List.generate(options.length, (oi) {
                       final selected = picked == oi;
+                      final reviewing = _verifySubmitted;
+                      final isCorrect = oi == correctIdx;
+                      final isWrongPick = reviewing && selected && !isCorrect;
+
+                      // Colour priority: correct answer (green) → user's wrong
+                      // pick (red) → selected pre-submit (accent) → plain.
+                      final Color borderCol;
+                      final Color bgCol;
+                      final Color iconCol;
+                      final IconData icon;
+                      if (reviewing && isCorrect) {
+                        borderCol = AppTheme.success;
+                        bgCol = AppTheme.success.withValues(alpha: 0.12);
+                        iconCol = AppTheme.success;
+                        icon = Icons.check_circle_rounded;
+                      } else if (isWrongPick) {
+                        borderCol = AppTheme.error;
+                        bgCol = AppTheme.error.withValues(alpha: 0.12);
+                        iconCol = AppTheme.error;
+                        icon = Icons.cancel_rounded;
+                      } else if (!reviewing && selected) {
+                        borderCol = accent;
+                        bgCol = accent.withValues(alpha: 0.12);
+                        iconCol = accent;
+                        icon = Icons.radio_button_checked;
+                      } else {
+                        borderCol = surface;
+                        bgCol = surface;
+                        iconCol = textSecondary;
+                        icon = Icons.radio_button_unchecked;
+                      }
+
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: InkWell(
-                          onTap: () => setState(() => _verifyAnswers[qi] = oi),
+                          onTap: reviewing
+                              ? null
+                              : () => setState(() => _verifyAnswers[qi] = oi),
                           borderRadius: BorderRadius.circular(10),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 12),
                             decoration: BoxDecoration(
-                              color: selected
-                                  ? accent.withValues(alpha: 0.12)
-                                  : surface,
+                              color: bgCol,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: selected
-                                    ? accent
-                                    : surface,
-                                width: 1.4,
-                              ),
+                              border: Border.all(color: borderCol, width: 1.4),
                             ),
                             child: Row(
                               children: [
-                                Icon(
-                                  selected
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_unchecked,
-                                  size: 18,
-                                  color:
-                                      selected ? accent : textSecondary,
-                                ),
+                                Icon(icon, size: 18, color: iconCol),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(options[oi],
                                       style: TextStyle(
                                         color: textPrimary,
                                         fontSize: 13,
+                                        fontWeight: reviewing && isCorrect
+                                            ? FontWeight.w700
+                                            : FontWeight.w400,
                                       )),
                                 ),
                               ],
@@ -1913,36 +1964,53 @@ class _TimerScreenState extends State<TimerScreen>
 
           if (_verifyQuestions.isNotEmpty && _verifyError == null) ...[
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _skipVerify,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: textSecondary),
-                    ),
-                    child: const Text('Skip'),
+            if (_verifySubmitted)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _continueAfterReview,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: Text(
+                      'Continue to Score · $_verifyCorrect/$_verifyTotal correct'),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton.icon(
-                    onPressed: allAnswered ? _submitVerify : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _skipVerify,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: textSecondary),
+                      ),
+                      child: const Text('Skip'),
                     ),
-                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                    label: Text(allAnswered
-                        ? 'Submit & See Score'
-                        : 'Answer ${_verifyQuestions.length - _verifyAnswers.length} more'),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: allAnswered ? _submitVerify : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline_rounded,
+                          size: 18),
+                      label: Text(allAnswered
+                          ? 'Submit & Review'
+                          : 'Answer ${_verifyQuestions.length - _verifyAnswers.length} more'),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ],
       ),
@@ -2813,16 +2881,15 @@ class _TimerScreenState extends State<TimerScreen>
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
+                          horizontal: 12, vertical: 13),
                       decoration: BoxDecoration(
-                        color: _linkedDoc != null
-                            ? AppTheme.primaryColor.withOpacity(0.07)
-                            : AppTheme.getSurfaceColor(isDark),
+                        color: AppTheme.primaryColor
+                            .withOpacity(_linkedDoc != null ? 0.07 : 0.06),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: _linkedDoc != null
-                              ? AppTheme.primaryColor.withOpacity(0.4)
-                              : Colors.transparent,
+                          color: AppTheme.primaryColor
+                              .withOpacity(_linkedDoc != null ? 0.4 : 0.5),
+                          width: 1.3,
                         ),
                       ),
                       child: Row(
@@ -2832,9 +2899,7 @@ class _TimerScreenState extends State<TimerScreen>
                                 ? _docTypeIcon(
                                     _linkedDoc!['type'] as String? ?? '')
                                 : Icons.attach_file_rounded,
-                            color: _linkedDoc != null
-                                ? AppTheme.primaryColor
-                                : AppTheme.getTextSecondary(isDark),
+                            color: AppTheme.primaryColor,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -2845,9 +2910,8 @@ class _TimerScreenState extends State<TimerScreen>
                                       'Linked document')
                                   : 'Tap to link a document for AI context',
                               style: AppTheme.bodySmall.copyWith(
-                                color: _linkedDoc != null
-                                    ? AppTheme.primaryColor
-                                    : AppTheme.getTextSecondary(isDark),
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.w600,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -2857,9 +2921,12 @@ class _TimerScreenState extends State<TimerScreen>
                             GestureDetector(
                               onTap: () => setState(() => _linkedDoc = null),
                               child: Icon(Icons.close_rounded,
-                                  size: 14,
+                                  size: 16,
                                   color: AppTheme.getTextSecondary(isDark)),
-                            ),
+                            )
+                          else
+                            const Icon(Icons.add_circle_outline_rounded,
+                                size: 18, color: AppTheme.primaryColor),
                         ],
                       ),
                     ),

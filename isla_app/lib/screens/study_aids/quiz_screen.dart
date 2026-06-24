@@ -1,8 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/unsplash_service.dart';
 import '../../services/user_settings_service.dart';
 import '../../widgets/confetti_overlay.dart';
 
@@ -31,6 +34,7 @@ class _QuizScreenState extends State<QuizScreen> {
   String _loadingMessage = 'AI is creating your quiz';
   int _selectedCount = 5;
   final _service = GeminiStudyService();
+  final Map<String, UnsplashPhoto?> _photoCache = {};
 
   @override
   void initState() {
@@ -40,6 +44,19 @@ class _QuizScreenState extends State<QuizScreen> {
       _isGenerating = false;
     } else {
       _generateQuiz();
+    }
+  }
+
+  void _fetchPhotos(List<Map<String, dynamic>> questions) {
+    for (final q in questions) {
+      final keyword = (q['imageKeyword'] ?? '').toString();
+      if (keyword.isEmpty || _photoCache.containsKey(keyword)) continue;
+      _photoCache[keyword] = null;
+      UnsplashService.fetchPhoto(keyword).then((photo) {
+        if (mounted && photo != null) {
+          setState(() => _photoCache[keyword] = photo);
+        }
+      });
     }
   }
 
@@ -89,6 +106,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 ];
           _isGenerating = false;
         });
+        _fetchPhotos(qs);
       }
     } catch (e) {
       if (mounted) {
@@ -413,29 +431,58 @@ class _QuizScreenState extends State<QuizScreen> {
                     borderRadius: AppTheme.borderRadiusLarge,
                     boxShadow: isDark ? [] : AppTheme.cardShadow,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.warning.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Question ${_currentQuestion + 1}',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: AppTheme.warning,
-                            fontWeight: FontWeight.w600,
+                  child: Builder(builder: (context) {
+                    final keyword = (question['imageKeyword'] ?? '').toString();
+                    final photo = keyword.isNotEmpty ? _photoCache[keyword] : null;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (photo != null && photo.url.isNotEmpty) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: CachedNetworkImage(
+                              imageUrl: photo.url,
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => const SizedBox.shrink(),
+                              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () => launchUrl(Uri.parse(photo.photographerUrl)),
+                            child: Text(
+                              'Photo by ${photo.photographerName} on Unsplash',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Question ${_currentQuestion + 1}',
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppTheme.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(question['question'] ?? '',
-                          style: AppTheme.headingSmall),
-                    ],
-                  ),
+                        const SizedBox(height: 16),
+                        Text(question['question'] ?? '',
+                            style: AppTheme.headingSmall),
+                      ],
+                    );
+                  }),
                 ),
                 const SizedBox(height: 24),
                 ...List.generate(

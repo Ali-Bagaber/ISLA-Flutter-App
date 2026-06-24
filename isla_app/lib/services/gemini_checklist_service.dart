@@ -7,7 +7,7 @@ class GeminiChecklistService {
 
   GeminiChecklistService({Dio? dio}) : _dio = dio ?? Dio();
 
-  /// Try Gemini → Groq → OpenRouter in order. Throws only if all fail.
+  /// Try Groq → Cerebras → SambaNova in order
   Future<List<String>> generateChecklist({
     required String goal,
     required String sourceText,
@@ -23,114 +23,63 @@ class GeminiChecklistService {
       existingItems: existingItems,
     );
 
-    // ── 1. Gemini ──────────────────────────────────────────────────────────────
-    if (AppConfig.hasGeminiKey) {
-      try {
-        return await _callGemini(prompt, requestedItems);
-      } on DioException catch (e) {
-        final code = e.response?.statusCode;
-        // Auth errors → don't try further (key is broken, not quota)
-        if (code == 401 || code == 403) {
-          throw StateError(_geminiHttpError(e));
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        await Future.delayed(Duration(seconds: 3 * attempt));
+      }
+
+      // 1. Groq
+      if (AppConfig.hasGroqKey) {
+        try {
+          return await _callOpenAiCompatible(
+            endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+            model: AppConfig.groqModel,
+            apiKey: AppConfig.groqApiKey,
+            prompt: prompt,
+            requestedItems: requestedItems,
+          );
+        } catch (e) {
+          print('[ISLA AI] Groq checklist failed (pass ${attempt + 1}): $e');
         }
-        // 429 or network → fall through to next provider
-      } on StateError {
-        // Parsing failure → fall through
       }
-    }
 
-    // ── 2. Groq ────────────────────────────────────────────────────────────────
-    if (AppConfig.hasGroqKey) {
-      try {
-        return await _callOpenAiCompatible(
-          endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-          model: AppConfig.groqModel,
-          apiKey: AppConfig.groqApiKey,
-          prompt: prompt,
-          requestedItems: requestedItems,
-        );
-      } catch (_) {
-        // Fall through to OpenRouter
+      // 2. Cerebras
+      if (AppConfig.hasCerebrasKey) {
+        try {
+          return await _callOpenAiCompatible(
+            endpoint: 'https://api.cerebras.ai/v1/chat/completions',
+            model: AppConfig.cerebrasModel,
+            apiKey: AppConfig.cerebrasApiKey,
+            prompt: prompt,
+            requestedItems: requestedItems,
+          );
+        } catch (e) {
+          print('[ISLA AI] Cerebras checklist failed (pass ${attempt + 1}): $e');
+        }
       }
-    }
 
-    // ── 3. OpenRouter ──────────────────────────────────────────────────────────
-    if (AppConfig.hasOpenRouterKey) {
-      try {
-        return await _callOpenAiCompatible(
-          endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-          model: AppConfig.openRouterModel,
-          apiKey: AppConfig.openRouterApiKey,
-          prompt: prompt,
-          requestedItems: requestedItems,
-          extraHeaders: {'HTTP-Referer': 'https://isla.app'},
-        );
-      } catch (_) {
-        // Fall through
+      // 3. SambaNova
+      if (AppConfig.hasSambanovaKey) {
+        try {
+          return await _callOpenAiCompatible(
+            endpoint: 'https://api.sambanova.ai/v1/chat/completions',
+            model: AppConfig.sambanovaModel,
+            apiKey: AppConfig.sambanovaApiKey,
+            prompt: prompt,
+            requestedItems: requestedItems,
+          );
+        } catch (e) {
+          print('[ISLA AI] SambaNova checklist failed (pass ${attempt + 1}): $e');
+        }
       }
     }
 
     throw StateError(
-      'All AI providers (Gemini, Groq, OpenRouter) are unavailable or quota-limited.',
+      'All AI providers (Groq, Cerebras, SambaNova) are unavailable or quota-limited.',
     );
   }
 
-  // ── Gemini call ──────────────────────────────────────────────────────────────
-
-  Future<List<String>> _callGemini(String prompt, int safeCount) async {
-    const endpoint =
-        'https://generativelanguage.googleapis.com/v1beta/models/${AppConfig.geminiModel}:generateContent';
-
-    final response = await _dio.post<Map<String, dynamic>>(
-      endpoint,
-      queryParameters: {'key': AppConfig.geminiApiKey},
-      data: {
-        'contents': [
-          {
-            'role': 'user',
-            'parts': [
-              {'text': prompt}
-            ]
-          }
-        ],
-        'generationConfig': {
-          'temperature': 1.0,
-          'topP': 0.95,
-          'maxOutputTokens': 512,
-        },
-      },
-      options: Options(
-        sendTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 20),
-      ),
-    );
-
-    final text = _extractGeminiText(response.data);
-    return _takeParsed(text, safeCount);
-  }
-
-  String _extractGeminiText(Map<String, dynamic>? data) {
-    final candidates = data?['candidates'];
-    if (candidates is List && candidates.isNotEmpty) {
-      final content = candidates.first['content'];
-      final parts = content['parts'];
-      if (parts is List && parts.isNotEmpty) {
-        final text = parts.first['text'];
-        if (text is String) return text;
-      }
-    }
-    throw StateError('Gemini response has no text.');
-  }
-
-  String _geminiHttpError(DioException e) {
-    final code = e.response?.statusCode;
-    if (code == 429) return 'Gemini quota/rate limit reached (429).';
-    if (code == 401 || code == 403) return 'Gemini API key invalid or restricted.';
-    if (code == 404) return 'Gemini model not found.';
-    return 'Gemini network error.';
-  }
-
-  // ── OpenAI-compatible call (Groq / OpenRouter) ───────────────────────────────
+  // ── OpenAI-compatible call (Groq / Cerebras / SambaNova) ─────────────────────
 
   Future<List<String>> _callOpenAiCompatible({
     required String endpoint,

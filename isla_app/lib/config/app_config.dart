@@ -1,22 +1,23 @@
 import 'secrets.dart';
 
 class AppConfig {
-  // ── Gemini ────────────────────────────────────────────────
-  static String get geminiApiKey => Secrets.geminiApiKey;
-  static const String geminiModel = 'gemini-2.0-flash-lite';
-  static bool get hasGeminiKey =>
-      geminiApiKey.trim().isNotEmpty &&
-      geminiApiKey != 'YOUR_GEMINI_API_KEY_HERE';
-
-  // ── Groq (first fallback) ─────────────────────────────────
+  // ── Groq (primary) ───────────────────────────────────────
   static String get groqApiKey => Secrets.groqApiKey;
+  // llama-3.3-70b-versatile: 12K tokens/min, 100K/day (free).
   static const String groqModel = 'llama-3.3-70b-versatile';
-  static bool get hasGroqKey =>
-      groqApiKey.trim().isNotEmpty;
+  static bool get hasGroqKey => groqApiKey.trim().isNotEmpty;
 
-  // ── OpenRouter (second fallback) ──────────────────────────
-  static String get openRouterApiKey => Secrets.openRouterApiKey;
-  static const String openRouterModel = 'meta-llama/llama-4-scout:free';
-  static bool get hasOpenRouterKey =>
-      openRouterApiKey.trim().isNotEmpty;
+  // ── Cerebras (fallback 1) ────────────────────────────────
+  static String get cerebrasApiKey => Secrets.cerebrasApiKey;
+  static const String cerebrasModel = 'llama-3.3-70b';
+  static bool get hasCerebrasKey => cerebrasApiKey.trim().isNotEmpty;
+
+  // ── SambaNova (fallback 2) ───────────────────────────────
+  static String get sambanovaApiKey => Secrets.sambanovaApiKey;
+  static const String sambanovaModel = 'Meta-Llama-3.3-70B-Instruct';
+  static bool get hasSambanovaKey => sambanovaApiKey.trim().isNotEmpty;
+
+  // ── Unsplash (study-aid images) ────────────────────────
+  static String get unsplashAccessKey => Secrets.unsplashAccessKey;
+  static bool get hasUnsplashKey => unsplashAccessKey.trim().isNotEmpty;
 }

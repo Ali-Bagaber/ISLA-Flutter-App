@@ -461,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Returns (topLabel, dayLabel) that both fit in the 44×44 date badge.
   (String, String) _parseDateBadge(String due) {
-    if (due == 'Today') return ('DUE', 'NOW');
+    if (due == 'Today') return ('DUE', 'TODAY');
     if (due == 'Tomorrow') return ('DUE', 'TMR');
     if (due == 'Overdue') return ('OVER', 'DUE');
     final parts = due.split(' ');
@@ -1132,43 +1132,30 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color outlineSoft,
     required bool isDark,
   }) {
-    const exams = [
-      _ExamItem(month: 'MAY', day: '24', title: 'Database Systems Quiz', subtitle: 'Tomorrow, 10:00 AM'),
-      _ExamItem(month: 'MAY', day: '27', title: 'Operating Systems Midterm', subtitle: 'Next Tuesday, 09:00 AM'),
-    ];
-    return Column(
-      children: exams
-          .map((e) => _UpcomingCard(
-                month: e.month,
-                day: e.day,
-                title: e.title,
-                subtitle: e.subtitle,
-                isDark: isDark,
-                primary: primary,
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                surfaceLow: surfaceLow,
-                outlineSoft: outlineSoft,
-              ))
-          .toList(),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      decoration: BoxDecoration(
+        color: surfaceLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: outlineSoft),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.event_note_rounded, size: 36, color: textSecondary),
+          const SizedBox(height: 10),
+          Text('No upcoming tasks',
+              style: GoogleFonts.inter(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14)),
+          const SizedBox(height: 4),
+          Text('Add one from the Tasks tab to plan ahead.',
+              style: GoogleFonts.inter(color: textSecondary, fontSize: 12)),
+        ],
+      ),
     );
   }
-}
-
-// ─── Data models ──────────────────────────────────────────────────────────────
-
-class _ExamItem {
-  final String month;
-  final String day;
-  final String title;
-  final String subtitle;
-
-  const _ExamItem({
-    required this.month,
-    required this.day,
-    required this.title,
-    required this.subtitle,
-  });
 }
 
 // ─── Arc Progress Painter ─────────────────────────────────────────────────────
@@ -1303,7 +1290,7 @@ class _UpcomingCard extends StatelessWidget {
                   style: GoogleFonts.manrope(
                     color: primary,
                     fontWeight: FontWeight.w800,
-                    fontSize: 16,
+                    fontSize: day.length > 2 ? 11 : 16,
                     height: 1.1,
                   ),
                 ),

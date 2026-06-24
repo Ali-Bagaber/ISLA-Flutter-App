@@ -1468,33 +1468,41 @@ class _FocusDonutChart extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 4),
-                            // Mini progress bar with gradient fill
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: Stack(
-                                children: [
-                                  Container(
+                            // Mini progress bar — gapped fill + track, echoing
+                            // the donut's segmented look.
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: (pct * 100).round().clamp(1, 100),
+                                  child: Container(
                                     height: 4,
-                                    color: color.withValues(
-                                        alpha: isDark ? 0.10 : 0.08),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          color,
+                                          color.withValues(alpha: 0.50),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
                                   ),
-                                  FractionallySizedBox(
-                                    widthFactor: pct.clamp(0.0, 1.0),
+                                ),
+                                if (pctInt < 100) ...[
+                                  const SizedBox(width: 2),
+                                  Expanded(
+                                    flex: ((1 - pct) * 100).round().clamp(1, 100),
                                     child: Container(
                                       height: 4,
                                       decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            color,
-                                            color.withValues(alpha: 0.50),
-                                          ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(999),
+                                        color: color.withValues(
+                                            alpha: isDark ? 0.06 : 0.05),
+                                        borderRadius:
+                                            BorderRadius.circular(999),
                                       ),
                                     ),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
                           ],
                         ),
@@ -2322,10 +2330,9 @@ class _MarksSection extends StatelessWidget {
       ),
     );
 
-    customSubjectCtrl.dispose();
-    nameCtrl.dispose();
-    scoreCtrl.dispose();
-    maxCtrl.dispose();
+    // Local dialog controllers are reclaimed by GC. Disposing them here while
+    // the dialog's TextFields are still tearing down trips the framework's
+    // _dependents.isEmpty assertion (red screen), so we intentionally don't.
   }
 
   static Future<void> _showEditMarkDialog(
@@ -2475,9 +2482,8 @@ class _MarksSection extends StatelessWidget {
         },
       ),
     );
-    nameCtrl.dispose();
-    scoreCtrl.dispose();
-    maxCtrl.dispose();
+    // Local dialog controllers are GC'd — see note above; disposing here would
+    // trip the _dependents.isEmpty assertion while the TextFields tear down.
   }
 }
 

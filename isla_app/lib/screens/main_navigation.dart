@@ -834,7 +834,8 @@ class _ProfilePageState extends State<_ProfilePage> {
       final ref = FirebaseStorage.instance
           .ref()
           .child('profile_photos')
-          .child('$uid.$ext');
+          .child(uid)
+          .child('photo.$ext');
       await ref.putData(bytes, SettableMetadata(contentType: 'image/$ext'));
       final url = await ref.getDownloadURL();
 

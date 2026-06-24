@@ -1,8 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../services/gemini_study_service.dart';
+import '../../services/unsplash_service.dart';
 
 class FlashcardsScreen extends StatefulWidget {
   final Map<String, dynamic> document;
@@ -31,6 +34,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
   bool _cancelled = false;
   final _service = GeminiStudyService();
   static const _totalCards = 8;
+  final Map<String, UnsplashPhoto?> _photoCache = {};
 
   @override
   void initState() {
@@ -85,6 +89,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
         _deck = List.from(cards);
         _isGenerating = false;
       });
+      _fetchPhotos(cards);
       GeminiStudyService.saveFlashcards(
         title: widget.document['title'] ?? '',
         subject: widget.document['subject'] ?? '',
@@ -102,6 +107,19 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
           _isGenerating = false;
         });
       }
+    }
+  }
+
+  void _fetchPhotos(List<Map<String, String>> cards) {
+    for (final card in cards) {
+      final keyword = card['imageKeyword'] ?? '';
+      if (keyword.isEmpty || _photoCache.containsKey(keyword)) continue;
+      _photoCache[keyword] = null;
+      UnsplashService.fetchPhoto(keyword).then((photo) {
+        if (mounted && photo != null) {
+          setState(() => _photoCache[keyword] = photo);
+        }
+      });
     }
   }
 
@@ -435,56 +453,90 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                       ),
                     ],
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _showAnswer ? 'Answer' : 'Question',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                  child: Builder(builder: (context) {
+                    final keyword = card['imageKeyword'] ?? '';
+                    final photo = keyword.isNotEmpty ? _photoCache[keyword] : null;
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _showAnswer ? 'Answer' : 'Question',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        _showAnswer
-                            ? (card['answer'] ?? '')
-                            : (card['question'] ?? ''),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          height: 1.55,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const Spacer(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.touch_app_rounded,
-                              color: Colors.white54, size: 13),
-                          const SizedBox(width: 4),
-                          Text(
-                            _showAnswer
-                                ? 'Tap to see question'
-                                : 'Tap to reveal answer',
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 12),
+                        if (photo != null && photo.url.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: CachedNetworkImage(
+                              imageUrl: photo.url,
+                              height: 110,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => const SizedBox.shrink(),
+                              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          GestureDetector(
+                            onTap: () => launchUrl(Uri.parse(photo.photographerUrl)),
+                            child: Text(
+                              'Photo by ${photo.photographerName} on Unsplash',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 9,
+                              ),
+                            ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: Center(
+                            child: SingleChildScrollView(
+                              child: Text(
+                                _showAnswer
+                                    ? (card['answer'] ?? '')
+                                    : (card['question'] ?? ''),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.55,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.touch_app_rounded,
+                                color: Colors.white54, size: 13),
+                            const SizedBox(width: 4),
+                            Text(
+                              _showAnswer
+                                  ? 'Tap to see question'
+                                  : 'Tap to reveal answer',
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }),
                 ),
               ),
             ),

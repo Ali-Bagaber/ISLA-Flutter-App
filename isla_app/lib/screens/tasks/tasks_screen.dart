@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../../theme/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/nav_controller.dart';
@@ -28,9 +29,11 @@ class TasksScreen extends StatefulWidget {
 }
 
 class _TasksScreenState extends State<TasksScreen> {
-  final Map<String, bool> _demoCompletion = <String, bool>{};
   final Map<String, bool> _sectionCollapsed = {};
   Timer? _clockTimer;
+  bool _showCalendar = false;
+  DateTime _focusedDay = DateTime.now();
+  DateTime _selectedDay = DateTime.now();
 
   // Per-task one-shot timers that fire at the exact due moment.
   final Map<String, Timer> _dueTimers = {};
@@ -129,40 +132,6 @@ class _TasksScreenState extends State<TasksScreen> {
     _taskSub?.cancel();
     super.dispose();
   }
-
-  final List<_TaskVm> _demoTasks = [
-    _TaskVm(
-      id: 'demo_1',
-      title: 'Review Data Structures – Arrays & Linked Lists',
-      description:
-          'Complete chapter 4 exercises and summarise the key differences between array and linked list time complexities.',
-      dueDate: DateTime.now().copyWith(hour: 14, minute: 0),
-      category: 'STUDY',
-      subject: 'Data Structures',
-      completed: false,
-      highlighted: true,
-    ),
-    _TaskVm(
-      id: 'demo_2',
-      title: 'Prepare OS Quiz – CPU Scheduling',
-      description:
-          'Revise Round-Robin, FCFS, and SJF scheduling algorithms. Practice past-paper questions from weeks 5–7.',
-      dueDate: DateTime.now().add(const Duration(days: 1)),
-      category: 'EXAM PREP',
-      subject: 'Operating Systems',
-      completed: false,
-    ),
-    _TaskVm(
-      id: 'demo_3',
-      title: 'Database Normalization – Practice Problems',
-      description:
-          'Work through 1NF → 3NF normalization exercises in the textbook and verify answers with lecture slides.',
-      dueDate: DateTime.now().add(const Duration(days: 3)),
-      category: 'ASSIGNMENT',
-      subject: 'Database Systems',
-      completed: false,
-    ),
-  ];
 
   DateTime? _toDateTime(dynamic value) {
     if (value is Timestamp) return value.toDate();
@@ -308,10 +277,6 @@ class _TasksScreenState extends State<TasksScreen> {
   /// Commit the completion change to data. Called by [_TaskTile] AFTER its
   /// check/exit animation has played (on complete) or immediately (on uncheck).
   void _commitToggle(_TaskVm task, bool value) {
-    if (task.id.startsWith('demo_')) {
-      setState(() => _demoCompletion[task.id] = value);
-      return;
-    }
     if (task.id.isEmpty) return;
     TaskService.toggleTask(task.id, value);
   }
@@ -640,24 +605,13 @@ class _TasksScreenState extends State<TasksScreen> {
                 child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: TaskService.watchTasks(),
                 builder: (context, snapshot) {
-                  final fetched = _mapFirestoreTasks(snapshot.data ?? const []);
-                  final source = fetched.isNotEmpty
-                      ? fetched
-                      : _demoTasks
-                          .map(
-                            (task) => task.copyWith(
-                              completed:
-                                  _demoCompletion[task.id] ?? task.completed,
-                            ),
-                          )
-                          .toList();
+                  final source = _mapFirestoreTasks(snapshot.data ?? const []);
 
                   final now = DateTime.now();
                   final pending = source.where((t) => !t.completed).toList()
                     ..sort((a, b) => _compareUrgency(a, b, now));
                   final completed = source.where((t) => t.completed).toList()
                     ..sort((a, b) {
-                      // Completed ones: most recent due date first.
                       final ad = a.dueDate;
                       final bd = b.dueDate;
                       if (ad == null && bd == null) return 0;
@@ -665,37 +619,44 @@ class _TasksScreenState extends State<TasksScreen> {
                       if (bd == null) return -1;
                       return bd.compareTo(ad);
                     });
+
                   return SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildDateHeader(source.length, completed.length, palette),
-                        const SizedBox(height: 20),
-                        if (pending.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 40),
-                            child: IslaEmptyState(
-                              icon: Icons.task_alt_rounded,
-                              title: completed.isNotEmpty
-                                  ? 'All caught up!'
-                                  : 'No tasks yet',
-                              message: completed.isNotEmpty
-                                  ? 'You\'ve cleared every pending task. Enjoy the calm — or plan ahead.'
-                                  : 'Add your first task and ISLA will remind you before it\'s due.',
-                              actionLabel: 'Add Task',
-                              onAction: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => const AddTaskScreen()),
+                        const SizedBox(height: 14),
+                        _buildViewToggle(palette),
+                        const SizedBox(height: 14),
+                        if (_showCalendar)
+                          _buildCalendarView(source, palette)
+                        else ...[
+                          if (pending.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 40),
+                              child: IslaEmptyState(
+                                icon: Icons.task_alt_rounded,
+                                title: completed.isNotEmpty
+                                    ? 'All caught up!'
+                                    : 'No tasks yet',
+                                message: completed.isNotEmpty
+                                    ? 'You\'ve cleared every pending task. Enjoy the calm — or plan ahead.'
+                                    : 'Add your first task and ISLA will remind you before it\'s due.',
+                                actionLabel: 'Add Task',
+                                onAction: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const AddTaskScreen()),
+                                ),
                               ),
-                            ),
-                          )
-                        else
-                          ..._buildGroupedSections(pending, palette),
-                        if (completed.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          _buildCompletedSection(completed, palette),
+                            )
+                          else
+                            ..._buildGroupedSections(pending, palette),
+                          if (completed.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _buildCompletedSection(completed, palette),
+                          ],
                         ],
                       ],
                     ),
@@ -708,6 +669,193 @@ class _TasksScreenState extends State<TasksScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildViewToggle(_TaskPalette palette) {
+    Widget tab(String label, IconData icon, bool active) {
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _showCalendar = label == 'Calendar'),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? palette.primary.withValues(alpha: 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16,
+                    color: active ? palette.primary : palette.onSurfaceMute),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                    color: active ? palette.primary : palette.onSurfaceMute,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: palette.glassPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.outlineSoft),
+      ),
+      child: Row(
+        children: [
+          tab('List', Icons.view_list_rounded, !_showCalendar),
+          tab('Calendar', Icons.calendar_month_rounded, _showCalendar),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarView(List<_TaskVm> allTasks, _TaskPalette palette) {
+    final tasksByDay = <DateTime, List<_TaskVm>>{};
+    for (final t in allTasks) {
+      if (t.dueDate == null) continue;
+      final day = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
+      tasksByDay.putIfAbsent(day, () => []).add(t);
+    }
+
+    final selectedDayNorm = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
+    final dayTasks = tasksByDay[selectedDayNorm] ?? [];
+    dayTasks.sort((a, b) => _compareUrgency(a, b, DateTime.now()));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: palette.outlineSoft),
+          ),
+          child: TableCalendar<_TaskVm>(
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
+            onDaySelected: (selected, focused) {
+              setState(() {
+                _selectedDay = selected;
+                _focusedDay = focused;
+              });
+            },
+            onPageChanged: (focused) => _focusedDay = focused,
+            eventLoader: (day) {
+              final norm = DateTime(day.year, day.month, day.day);
+              return tasksByDay[norm] ?? [];
+            },
+            calendarStyle: CalendarStyle(
+              outsideDaysVisible: false,
+              todayDecoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              todayTextStyle: GoogleFonts.inter(
+                color: palette.primary,
+                fontWeight: FontWeight.w700,
+              ),
+              selectedDecoration: BoxDecoration(
+                color: palette.primary,
+                shape: BoxShape.circle,
+              ),
+              selectedTextStyle: GoogleFonts.inter(
+                color: palette.fabIcon,
+                fontWeight: FontWeight.w700,
+              ),
+              defaultTextStyle: GoogleFonts.inter(color: palette.onSurface),
+              weekendTextStyle: GoogleFonts.inter(color: palette.onSurfaceMute),
+              markerDecoration: BoxDecoration(
+                color: palette.primary,
+                shape: BoxShape.circle,
+              ),
+              markerSize: 6,
+              markersMaxCount: 3,
+              markerMargin: const EdgeInsets.symmetric(horizontal: 1),
+            ),
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              titleTextStyle: GoogleFonts.manrope(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: palette.onSurface,
+              ),
+              leftChevronIcon: Icon(Icons.chevron_left_rounded, color: palette.onSurfaceMute),
+              rightChevronIcon: Icon(Icons.chevron_right_rounded, color: palette.onSurfaceMute),
+            ),
+            daysOfWeekStyle: DaysOfWeekStyle(
+              weekdayStyle: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: palette.onSurfaceMute,
+              ),
+              weekendStyle: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: palette.onSurfaceMute.withValues(alpha: 0.6),
+              ),
+            ),
+            calendarFormat: CalendarFormat.month,
+            startingDayOfWeek: StartingDayOfWeek.monday,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _formatSelectedDayLabel(),
+          style: GoogleFonts.manrope(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: palette.onSurface,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (dayTasks.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: palette.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: palette.outlineSoft),
+            ),
+            child: Text(
+              'No tasks on this day',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: palette.onSurfaceMute,
+                fontSize: 14,
+              ),
+            ),
+          )
+        else
+          ...dayTasks.map((task) => _buildNewTaskCard(task, palette,
+              inCompletedSection: task.completed)),
+      ],
+    );
+  }
+
+  String _formatSelectedDayLabel() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sel = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
+    final diff = sel.difference(today).inDays;
+    if (diff == 0) return 'Today\'s Tasks';
+    if (diff == 1) return 'Tomorrow\'s Tasks';
+    if (diff == -1) return 'Yesterday\'s Tasks';
+    return '${_monthShort(_selectedDay.month)} ${_selectedDay.day} Tasks';
   }
 
   Widget _buildFab(_TaskPalette palette) {
